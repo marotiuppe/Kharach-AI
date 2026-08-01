@@ -1,0 +1,26 @@
+# Environment & Secret Credentials
+.env
+*.env
+
+# SQLite Databases & Upload Files
+*.db
+*.sqlite
+uploads/
+data/
+
+# Python Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python Cache & IDE Metadata
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.vscode/
+.idea/
+*.log

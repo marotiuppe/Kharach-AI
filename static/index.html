@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kharach AI — Smart Expense & Statement Tracker</title>
+  <meta name="description" content="AI-Powered bank statement and expense statement analyzer app." />
+  <meta name="theme-color" content="#0a0c10" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="alternate icon" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/favicon.svg" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="brand" id="nav-brand" style="cursor: pointer;">
+      <img src="/favicon.svg" alt="Kharach AI" class="brand-logo-icon" style="width: 24px; height: 24px; vertical-align: middle;" /> Kharach AI
+    </div>
+    
+    <div id="nav-public-section" class="nav-public">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#how-it-works" class="nav-link">How It Works</a>
+      <button id="btn-theme-toggle" class="btn btn-secondary" title="Toggle Theme Preference" style="font-size: 0.82rem; padding: 0.4rem 0.65rem;">🌙</button>
+      <button id="btn-install-pwa" class="btn btn-secondary hidden" style="font-size: 0.82rem; padding: 0.4rem 0.85rem; border-color: rgba(99, 102, 241, 0.4); color: #a5b4fc;">📲 Install App</button>
+      <button id="btn-nav-login" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.4rem 0.85rem;">Sign In</button>
+      <button id="btn-nav-signup" class="btn" style="font-size: 0.82rem; padding: 0.4rem 0.85rem;">Get Started</button>
+    </div>
+
+    <div id="nav-user-section" class="nav-user hidden">
+      <button id="btn-user-theme-toggle" class="btn btn-secondary" title="Toggle Theme Preference" style="font-size: 0.8rem; padding: 0.35rem 0.6rem;">🌙</button>
+      <button id="btn-nav-landing" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">🌐 Home</button>
+      <button id="btn-nav-dashboard" class="btn" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">📊 Dashboard</button>
+      <button id="btn-open-settings" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">⚙️ Admin Settings</button>
+      <button id="btn-test-models" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">🔍 Check Active Models</button>
+      <span id="user-display-name" class="user-badge">User</span>
+      <button id="btn-logout" class="btn btn-secondary">Logout</button>
+    </div>
+  </header>
+
+  <!-- Image Lightbox Modal for Full View -->
+  <div id="image-lightbox-modal" class="auth-container hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+    <div style="position: relative; max-width: 90vw; max-height: 90vh;">
+      <button id="btn-close-lightbox" style="position: absolute; top: -12px; right: -12px; background: #ef4444; color: white; border: 2px solid #0a0c10; border-radius: 50%; width: 28px; height: 28px; font-size: 0.9rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;">✕</button>
+      <img id="lightbox-full-image" src="" alt="Full Statement View" style="max-width: 90vw; max-height: 88vh; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
+    </div>
+  </div>
+
+  <!-- Admin Settings Modal / Banner -->
+  <div id="settings-modal" class="auth-container hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000;">
+    <div class="auth-card" style="max-width: 550px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="font-size: 1.3rem;">⚙️ System Admin Settings</h2>
+        <button id="btn-close-settings" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">
+        Configure server API keys and SMTP credentials safely in the SQLite database.
+      </p>
+
+      <form id="form-admin-settings">
+        <div class="form-group">
+          <label for="admin-gemini-key">Gemini API Key</label>
+          <input type="password" id="admin-gemini-key" class="form-input" placeholder="AIzaSy..." required />
+        </div>
+
+        <div class="form-group">
+          <label for="admin-gemini-model">Gemini Model</label>
+          <input type="text" id="admin-gemini-model" class="form-input" placeholder="gemini-flash-latest" required />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label for="admin-smtp-server">SMTP Server</label>
+            <input type="text" id="admin-smtp-server" class="form-input" placeholder="smtp.gmail.com" required />
+          </div>
+          <div class="form-group">
+            <label for="admin-smtp-port">SMTP Port</label>
+            <input type="text" id="admin-smtp-port" class="form-input" placeholder="587" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="admin-smtp-user">SMTP Username / Email</label>
+          <input type="email" id="admin-smtp-user" class="form-input" placeholder="kharachai.info@gmail.com" required />
+        </div>
+
+        <div class="form-group">
+          <label for="admin-smtp-pass">SMTP App Password</label>
+          <input type="password" id="admin-smtp-pass" class="form-input" placeholder="16-character app password" required />
+        </div>
+
+        <div class="form-group">
+          <label for="admin-smtp-from">SMTP Sender Email</label>
+          <input type="email" id="admin-smtp-from" class="form-input" placeholder="kharachai.info@gmail.com" required />
+        </div>
+
+        <p id="settings-save-msg" style="font-size: 0.85rem; margin-bottom: 1rem;" class="hidden"></p>
+        <button type="submit" class="btn" style="width: 100%;">Save Admin Credentials</button>
+      </form>
+
+
+    </div>
+  </div>
+
+  <!-- Add / Edit Transaction Modal -->
+  <div id="tx-modal" class="auth-container hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1050; display: flex; align-items: center; justify-content: center;">
+    <div class="auth-card" style="max-width: 500px; width: 90%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 id="tx-modal-title" style="font-size: 1.25rem;">✏️ Edit Transaction</h2>
+        <button id="btn-close-tx-modal" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">✕</button>
+      </div>
+
+      <form id="form-tx-modal">
+        <input type="hidden" id="tx-edit-id" value="" />
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label for="tx-modal-date">Date</label>
+            <input type="date" id="tx-modal-date" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label for="tx-modal-type">Type</label>
+            <select id="tx-modal-type" class="form-input" style="background: var(--bg-card); color: var(--text-primary);">
+              <option value="DEBIT">DEBIT</option>
+              <option value="CREDIT">CREDIT</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="tx-modal-recipient">Recipient / Sender</label>
+          <input type="text" id="tx-modal-recipient" class="form-input" placeholder="e.g. Swiggy, Sandeep, Petrol Pump" required />
+        </div>
+
+        <div class="form-group">
+          <label for="tx-modal-note">Particulars & Note</label>
+          <input type="text" id="tx-modal-note" class="form-input" placeholder="e.g. Dinner, Bike servicing" required />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label for="tx-modal-amount">Amount (₹)</label>
+            <input type="number" step="0.01" id="tx-modal-amount" class="form-input" placeholder="0.00" required />
+          </div>
+          <div class="form-group">
+            <label for="tx-modal-category">Category</label>
+            <select id="tx-modal-category" class="form-input" style="background: var(--bg-card); color: var(--text-primary);">
+              <option value="Food/Groceries">Food/Groceries</option>
+              <option value="Fuel">Fuel</option>
+              <option value="Shopping">Shopping</option>
+              <option value="Rent/Housing">Rent/Housing</option>
+              <option value="Bills/Recharge">Bills/Recharge</option>
+              <option value="EMIs/Loans">EMIs/Loans</option>
+              <option value="ATM/Cash">ATM/Cash</option>
+              <option value="Transfers/Personal">Transfers/Personal</option>
+              <option value="Income">Income</option>
+              <option value="Others">Others</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="tx-modal-account">Bank / Account Tag</label>
+          <input type="text" id="tx-modal-account" class="form-input" placeholder="e.g. HDFC Savings, SBI Credit Card, General" value="General" required />
+
+        </div>
+
+
+        <p id="tx-modal-msg" style="font-size: 0.85rem; margin-bottom: 1rem;" class="hidden"></p>
+        <button type="submit" class="btn" style="width: 100%;">Save Transaction</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Landing Screen Container -->
+  <main id="landing-screen" class="landing-container">
+    
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <h1 class="hero-title">
+        Turn Bank Statements into <span class="text-gradient">Actionable Intelligence</span>
+      </h1>
+      <p class="hero-subtitle">
+        Drop bank statement PDFs or paste screenshots. Kharach AI automatically parses, categorizes, tracks merchant spend, and lets you chat with your finances in plain English.
+      </p>
+
+      <div class="hero-cta-group">
+        <button id="btn-hero-signup" class="btn btn-hero">
+          Get Started Free <span class="btn-arrow">→</span>
+        </button>
+        <button id="btn-hero-login" class="btn btn-secondary btn-hero-secondary">
+          Sign In to Workspace
+        </button>
+      </div>
+
+      <!-- Feature Highlight Badges -->
+      <div class="hero-highlights">
+        <div class="highlight-item">🔒 100% Private & Local DB</div>
+        <div class="highlight-item">📄 PDF & Image OCR Analysis</div>
+        <div class="highlight-item">📊 Interactive Analytics & Charts</div>
+        <div class="highlight-item">💬 Natural Language AI Chat</div>
+      </div>
+
+      <!-- Hero Visual Showcase / Mockup Preview -->
+      <div class="hero-preview-card">
+        <div class="preview-header">
+          <div class="preview-dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <div class="preview-title">Kharach AI — Statement Analyzer & AI Assistant</div>
+        </div>
+        <div class="preview-body">
+          <div class="preview-stats-row">
+            <div class="preview-stat-card">
+              <div class="p-label">Total Credited</div>
+              <div class="p-val credit">₹1,45,200.00</div>
+            </div>
+            <div class="preview-stat-card">
+              <div class="p-label">Total Debited</div>
+              <div class="p-val debit">₹42,850.00</div>
+            </div>
+            <div class="preview-stat-card">
+              <div class="p-label">Net Balance</div>
+              <div class="p-val balance">₹1,02,350.00</div>
+            </div>
+          </div>
+          <div class="preview-chat-snippet">
+            <div class="snippet-msg ai">
+              <span class="sparkle">✨</span> "In July, your top spending category was <strong>Food & Groceries (₹18,400)</strong> followed by <strong>Fuel (₹4,200)</strong>."
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Key Features Section -->
+    <section id="features" class="features-section">
+      <div class="section-header">
+        <h2 class="section-title">Everything You Need to Master Your Money</h2>
+        <p class="section-subtitle">No manual spreadsheets. No complex setups. Just upload and let AI handle the heavy lifting.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Instant AI Statement Parsing</h3>
+          <p>Drag and drop PDF bank statements or paste screenshots directly from your clipboard (Ctrl+V). Extracts dates, amounts, and merchant details instantly.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📜</div>
+          <h3>Smart Transaction Ledger</h3>
+          <p>Filter by debit/credit, category, or bank account. Full-text search and seamless exports to CSV & Excel with a single click.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📈</div>
+          <h3>Visual Analytics & Insights</h3>
+          <p>Interactive category pie charts, daily spending trendlines, and month-over-month income vs expense cash flow visualizations.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🏷️</div>
+          <h3>Merchant Leaderboard</h3>
+          <p>Automatically aggregates spend by vendor (Swiggy, Amazon, Fuel, EMIs) so you can pinpoint where your money flows every month.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔄</div>
+          <h3>Recurring & Subscription Burn</h3>
+          <p>Auto-detects repeating monthly debits, utility bills, and subscriptions to calculate your total fixed monthly burn rate.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">💬</div>
+          <h3>Gemini Financial Assistant</h3>
+          <p>Ask natural questions like <em>"How much did I spend on dining out last month?"</em> or request custom visual charts on the fly.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works" class="how-it-works-section">
+      <div class="section-header">
+        <h2 class="section-title">How Kharach AI Works</h2>
+        <p class="section-subtitle">Three simple steps from raw statement to clear financial clarity.</p>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-number">01</div>
+          <h3>Upload Statement</h3>
+          <p>Upload your bank statement PDF, upload images, or press Ctrl+V to paste statement screenshots directly into the AI chat box.</p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">02</div>
+          <h3>AI Analysis & Extraction</h3>
+          <p>Kharach AI reads tabular data, parses multi-line descriptions, categorizes transactions, and updates your personal SQLite database.</p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">03</div>
+          <h3>Insight & Conversation</h3>
+          <p>Explore interactive charts, export custom statements to Excel/CSV, or converse with the AI assistant for deep financial guidance.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Security Spotlight Banner -->
+    <section class="security-section">
+      <div class="security-card">
+        <div class="security-badge">🔒 Privacy & Control</div>
+        <h2>Your Financial Data Belongs to You</h2>
+        <p>Kharach AI runs with localized SQLite database storage and configurable admin API credentials. Your transactions remain strictly under your control with zero third-party telemetry.</p>
+        <button id="btn-security-signup" class="btn btn-hero" style="margin-top: 1rem;">
+          Start Analyzing Statements Now
+        </button>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="landing-footer">
+      <div class="footer-content">
+        <div class="footer-brand" style="display: flex; align-items: center; gap: 0.4rem;">
+          <img src="/favicon.svg" alt="Kharach AI" style="width: 22px; height: 22px; vertical-align: middle;" /> <strong>Kharach AI</strong> — Smart Expense & Statement Tracker
+        </div>
+        <div class="footer-copyright">
+          © 2026 Kharach AI. Designed &amp; Developed by Maroti Uppe (Software Developer). Built for financial intelligence and seamless statement analysis.
+        </div>
+      </div>
+    </footer>
+
+  </main>
+
+  <!-- Auth Screen Container -->
+  <main id="auth-screen" class="auth-container">
+    <div class="auth-card">
+      <h1 style="text-align: center; margin-bottom: 0.5rem; font-size: 1.6rem;">Welcome to Kharach AI</h1>
+      <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem;">
+        Sign in to manage and analyze your bank statements
+      </p>
+
+      <div class="auth-tabs">
+        <div id="tab-login-btn" class="auth-tab active">Sign In</div>
+        <div id="tab-signup-btn" class="auth-tab">Sign Up</div>
+      </div>
+
+      <!-- Sign In Form -->
+      <form id="form-login">
+        <div class="form-group">
+          <label for="login-username">Username, Email, or Mobile</label>
+          <input type="text" id="login-username" class="form-input" placeholder="Enter username/email/mobile" required />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" class="form-input" required />
+        </div>
+        <div style="text-align: right; margin-bottom: 0.8rem;">
+          <button type="button" id="btn-forgot-pass" style="background: none; border: none; color: var(--accent-primary); font-size: 0.8rem; cursor: pointer;">Forgot password?</button>
+        </div>
+        <p id="auth-error-msg" style="color: var(--accent-danger); font-size: 0.85rem; margin-bottom: 1rem;" class="hidden"></p>
+        <button type="submit" class="btn" style="width: 100%;">Sign In</button>
+      </form>
+
+
+      <!-- Sign Up Form -->
+      <form id="form-signup" class="hidden">
+        <div class="form-group">
+          <label for="signup-fullname">Full Name</label>
+          <input type="text" id="signup-fullname" class="form-input" placeholder="e.g. Rahul Sharma" required />
+        </div>
+
+        <div class="form-group">
+          <label for="signup-email">Email Address</label>
+          <input type="email" id="signup-email" class="form-input" placeholder="name@example.com" required />
+        </div>
+
+        <div class="form-group">
+          <label for="signup-mobile">Mobile Number</label>
+          <input type="tel" id="signup-mobile" class="form-input" placeholder="10-digit mobile number" required />
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <button type="button" id="btn-send-otp" class="btn btn-secondary" style="width: 100%;">Send Verification OTPs</button>
+          <p id="otp-send-status" style="font-size: 0.8rem; margin-top: 0.4rem; color: var(--accent-success);" class="hidden"></p>
+        </div>
+
+        <div id="otp-section" class="hidden">
+          <div class="form-group">
+            <label for="signup-email-otp">Email OTP</label>
+            <input type="text" id="signup-email-otp" class="form-input" placeholder="Enter 6-digit Email OTP" required />
+          </div>
+
+          <div class="form-group">
+            <label for="signup-mobile-otp">Mobile OTP</label>
+            <input type="text" id="signup-mobile-otp" class="form-input" placeholder="Enter 6-digit Mobile OTP" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="signup-username">Username</label>
+          <input type="text" id="signup-username" class="form-input" placeholder="Choose a username" required />
+        </div>
+
+        <div class="form-group">
+          <label for="signup-password">Password</label>
+          <input type="password" id="signup-password" class="form-input" required />
+        </div>
+
+        <div class="form-group">
+          <label for="signup-confirm">Confirm Password</label>
+          <input type="password" id="signup-confirm" class="form-input" required />
+        </div>
+
+        <p id="signup-msg" style="font-size: 0.85rem; margin-bottom: 1rem;" class="hidden"></p>
+        <button type="submit" class="btn" style="width: 100%;">Verify OTP & Create Account</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- Dashboard Container -->
+  <main id="dashboard-screen" class="dashboard-container hidden" style="padding: 0.75rem 0.5rem;">
+
+    <!-- Active Models Test Display Banner -->
+    <div id="models-test-banner" class="chart-card hidden" style="margin-bottom: 1rem; padding: 0.8rem 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+        <h3 style="font-size: 0.95rem;">⚡ Tested Gemini API Models</h3>
+        <button id="btn-close-models-banner" style="background: none; border: none; color: var(--text-secondary); cursor: pointer;">✕</button>
+      </div>
+      <div id="models-test-results" style="display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: 0.8rem;"></div>
+    </div>
+
+    <!-- Split Screen Layout: Left Dashboard | Right Gemini AI Chat -->
+    <div class="dashboard-split-layout">
+
+      <!-- LEFT SIDE: Main Financial Dashboard -->
+      <div class="dashboard-main-left">
+
+        <!-- KPI Summary Metrics -->
+        <section class="kpi-grid" style="gap: 1rem; margin-bottom: 1rem;">
+          <div class="kpi-card" style="padding: 0.85rem 1.25rem;">
+            <div class="kpi-label" style="font-size: 0.78rem;">Total Credited</div>
+            <div id="kpi-credited" class="kpi-value credit" style="font-size: 1.35rem;">₹0.00</div>
+          </div>
+          <div class="kpi-card" style="padding: 0.85rem 1.25rem;">
+            <div class="kpi-label" style="font-size: 0.78rem;">Total Debited</div>
+            <div id="kpi-debited" class="kpi-value debit" style="font-size: 1.35rem;">₹0.00</div>
+          </div>
+          <div class="kpi-card" style="padding: 0.85rem 1.25rem;">
+            <div class="kpi-label" style="font-size: 0.78rem;">Net Balance</div>
+            <div id="kpi-balance" class="kpi-value balance" style="font-size: 1.35rem;">₹0.00</div>
+          </div>
+          <div class="kpi-card" style="padding: 0.85rem 1.25rem;">
+            <div class="kpi-label" style="font-size: 0.78rem;">Total Transactions</div>
+            <div id="kpi-count" class="kpi-value" style="font-size: 1.35rem;">0</div>
+          </div>
+        </section>
+
+        <!-- Tabs Navigation -->
+        <div class="tabs-nav" style="margin-bottom: 1rem; flex-wrap: wrap;">
+          <button id="tab-btn-ledger" class="tab-btn active" title="Transaction Ledger">
+            <span class="tab-icon">📜</span><span class="tab-text">Ledger</span>
+          </button>
+          <button id="tab-btn-analytics" class="tab-btn" title="Spending Insights">
+            <span class="tab-icon">📈</span><span class="tab-text">Insights</span>
+          </button>
+          <button id="tab-btn-merchants" class="tab-btn" title="Top Merchants Leaderboard">
+            <span class="tab-icon">🏷️</span><span class="tab-text">Top Merchants</span>
+          </button>
+          <button id="tab-btn-cashflow" class="tab-btn" title="Monthly Cash Flow">
+            <span class="tab-icon">💵</span><span class="tab-text">Cash Flow</span>
+          </button>
+          <button id="tab-btn-recurring" class="tab-btn" title="Recurring & Subscriptions">
+            <span class="tab-icon">🔄</span><span class="tab-text">Subscriptions</span>
+          </button>
+          <button id="tab-btn-budget" class="tab-btn" title="Budget & Category Limits">
+            <span class="tab-icon">🎯</span><span class="tab-text">Budget Limits</span>
+          </button>
+          <button id="tab-btn-large" class="tab-btn" title="Large Transactions (> ₹1k)">
+            <span class="tab-icon">🚨</span><span class="tab-text">Large Tx (> ₹1k)</span>
+          </button>
+        </div>
+
+        <!-- Tab 1: Transaction Ledger & Filters -->
+        <div id="tab-content-ledger" class="tab-content active">
+          <div class="filters-bar" style="padding: 0.6rem 1rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+            <div>
+              <label style="font-size: 0.75rem; display: block; color: var(--text-secondary);">Type</label>
+              <select id="filter-type" class="filter-select">
+                <option value="ALL">All Types</option>
+                <option value="DEBIT">DEBIT</option>
+                <option value="CREDIT">CREDIT</option>
+              </select>
+            </div>
+
+            <div>
+              <label style="font-size: 0.75rem; display: block; color: var(--text-secondary);">Category</label>
+              <select id="filter-category" class="filter-select">
+                <option value="ALL">All Categories</option>
+              </select>
+            </div>
+
+            <div>
+              <label style="font-size: 0.75rem; display: block; color: var(--text-secondary);">Bank / Account</label>
+              <select id="filter-account" class="filter-select">
+                <option value="ALL">All Accounts</option>
+              </select>
+            </div>
+
+            <div>
+              <label style="font-size: 0.75rem; display: block; color: var(--text-secondary);">Search</label>
+              <input type="text" id="filter-search" class="filter-input" placeholder="Recipient / Note / Date..." />
+            </div>
+
+            <div style="display: flex; align-items: flex-end; gap: 0.4rem;">
+              <button id="btn-add-tx" class="btn" title="Add New Transaction Entry" style="padding: 0.45rem 0.65rem; display: inline-flex; align-items: center; justify-content: center; color: #ffffff;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              </button>
+              <button id="btn-reset-filters" class="btn btn-secondary" title="Reset All Filters" style="padding: 0.45rem 0.65rem; display: inline-flex; align-items: center; justify-content: center; color: #f0f4f8;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              </button>
+              <button id="btn-clear-all-data" class="btn btn-secondary hidden" title="Clear Transaction History" style="padding: 0.45rem 0.65rem; display: inline-flex; align-items: center; justify-content: center; border-color: rgba(239, 68, 68, 0.4); color: var(--accent-danger);">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              </button>
+            </div>
+
+            <div style="margin-left: auto; display: flex; align-items: flex-end; gap: 0.4rem;">
+              <button id="btn-export-csv" class="btn btn-secondary" title="Export Filtered CSV Statement" style="padding: 0.45rem 0.65rem; display: inline-flex; align-items: center; justify-content: center; color: #f0f4f8;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              </button>
+              <button id="btn-export-excel" class="btn btn-secondary" title="Export Filtered Excel Statement (.xlsx)" style="padding: 0.45rem 0.65rem; display: inline-flex; align-items: center; justify-content: center; color: #f0f4f8;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg>
+              </button>
+            </div>
+
+
+          </div>
+
+          <div id="bulk-actions-bar" class="bulk-actions-bar hidden" style="margin-bottom: 0.75rem; padding: 0.6rem 1rem; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+            <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">
+              Selected: <span id="bulk-selected-count" style="color: var(--accent-primary);">0</span> transactions
+            </span>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <select id="bulk-category-select" class="filter-select" style="font-size: 0.8rem; padding: 0.35rem 0.6rem;">
+                <option value="">-- Apply Bulk Category --</option>
+                <option value="Food/Groceries">Food/Groceries</option>
+                <option value="Fuel">Fuel</option>
+                <option value="Shopping">Shopping</option>
+                <option value="Rent/Housing">Rent/Housing</option>
+                <option value="Bills/Recharge">Bills/Recharge</option>
+                <option value="EMIs/Loans">EMIs/Loans</option>
+                <option value="ATM/Cash">ATM/Cash</option>
+                <option value="Transfers/Personal">Transfers/Personal</option>
+                <option value="Income">Income</option>
+                <option value="Others">Others</option>
+              </select>
+              <button id="btn-bulk-delete" class="btn btn-secondary hidden" style="font-size: 0.8rem; padding: 0.35rem 0.75rem; border-color: rgba(239, 68, 68, 0.4); color: var(--accent-danger);">
+                🗑️ Delete Selected
+              </button>
+              <button id="btn-bulk-clear" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.6rem;">
+                ✕ Clear Selection
+              </button>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 36px; text-align: center;"><input type="checkbox" id="select-all-tx" title="Select All Transactions" style="cursor: pointer; width: 15px; height: 15px;" /></th>
+                  <th class="sortable-header" data-sort="date" style="cursor: pointer;">Date <span id="sort-icon-date" class="sort-icon">↕</span></th>
+                  <th class="sortable-header" data-sort="recipient_or_sender" style="cursor: pointer;">Recipient / Sender <span id="sort-icon-recipient" class="sort-icon">↕</span></th>
+                  <th>Particulars & Note</th>
+                  <th class="sortable-header" data-sort="debit_amount" style="cursor: pointer;">Debit (₹) <span id="sort-icon-debit" class="sort-icon">↕</span></th>
+                  <th class="sortable-header" data-sort="credit_amount" style="cursor: pointer;">Credit (₹) <span id="sort-icon-credit" class="sort-icon">↕</span></th>
+                  <th>Type</th>
+                  <th class="sortable-header" data-sort="category" style="cursor: pointer;">Category <span id="sort-icon-category" class="sort-icon">↕</span></th>
+                  <th>Account</th>
+                  <th style="text-align: center;">Actions</th>
+                </tr>
+
+              </thead>
+              <tbody id="ledger-table-body">
+                <tr>
+                  <td colspan="10" style="text-align: center; color: var(--text-secondary);">No transactions parsed yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+
+        </div>
+
+        <!-- Tab 2: Visual Analytics & Insights -->
+        <div id="tab-content-analytics" class="tab-content">
+          <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
+            💡 <strong>Interactive Charts:</strong> Click any Category bar or Daily Trend point to immediately view its filtered transactions in the Ledger tab.
+          </p>
+          <div class="charts-grid">
+            <div class="chart-card">
+              <div class="chart-title">Category Spending Breakdown</div>
+              <canvas id="chart-categories" style="cursor: pointer;"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">Daily Spending Trend</div>
+              <canvas id="chart-daily-trend" style="cursor: pointer;"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Top Merchants & Vendors -->
+        <div id="tab-content-merchants" class="tab-content">
+          <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
+            🏷️ <strong>Vendor Leaderboard:</strong> Top 10 recipients by total spend amount. Click any merchant to filter its transactions.
+          </p>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Merchant / Vendor</th>
+                  <th>Primary Category</th>
+                  <th>Tx Count</th>
+                  <th>Total Spent (₹)</th>
+                  <th>Spending Share</th>
+                </tr>
+              </thead>
+              <tbody id="merchants-table-body">
+                <tr>
+                  <td colspan="6" style="text-align: center; color: var(--text-secondary);">No merchant spending data available yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 4: Monthly Cash Flow -->
+        <div id="tab-content-cashflow" class="tab-content">
+          <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.75rem;">
+            💵 <strong>Monthly Income vs Debits:</strong> Month-over-month cash flow analysis and savings rate trends.
+          </p>
+          <div class="chart-card">
+            <div class="chart-title">Monthly Income vs Expenses Breakdown</div>
+            <canvas id="chart-cashflow" style="cursor: pointer; max-height: 380px;"></canvas>
+          </div>
+        </div>
+
+        <!-- Tab 5: Recurring & Subscriptions -->
+        <div id="tab-content-recurring" class="tab-content">
+          <div style="background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); border-radius: var(--radius-md); padding: 0.85rem 1.25rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 0.8rem; color: var(--text-secondary);">Estimated Fixed Burn Rate</div>
+              <div id="burn-rate-total" style="font-size: 1.35rem; font-weight: 700; color: var(--accent-warning);">₹0.00 / month</div>
+            </div>
+            <span style="font-size: 0.8rem; color: var(--text-secondary);">Auto-detected repeating monthly debits</span>
+          </div>
+
+          <div id="recurring-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+            <div style="color: var(--text-secondary); font-size: 0.85rem; padding: 1rem; text-align: center; grid-column: 1/-1;">No repeating subscription transactions detected yet.</div>
+          </div>
+        </div>
+
+        <!-- Tab 6: Budget & Category Limits -->
+        <div id="tab-content-budget" class="tab-content">
+          <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.85rem;">
+            🎯 <strong>Monthly Category Budgets:</strong> Set target spending limits per category to track variance and prevent overspending.
+          </p>
+          <div id="budget-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+            <div style="color: var(--text-secondary); font-size: 0.85rem; padding: 1rem; text-align: center; grid-column: 1/-1;">Load transactions to configure category budget limits.</div>
+          </div>
+        </div>
+
+        <!-- Tab 7: Large Transactions -->
+        <div id="tab-content-large" class="tab-content">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Recipient / Sender</th>
+                  <th>Particulars & Note</th>
+                  <th>Debit (₹)</th>
+                  <th>Credit (₹)</th>
+                  <th>Type</th>
+                  <th>Category</th>
+                </tr>
+              </thead>
+              <tbody id="large-table-body">
+                <tr>
+                  <td colspan="7" style="text-align: center; color: var(--text-secondary);">No transactions above ₹1,000 found.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Drag Resizer Gutter -->
+      <div class="chat-resizer" id="chat-resizer" title="Drag to resize AI chat width"></div>
+
+      <!-- RIGHT SIDE: Gemini AI Chat Panel -->
+      <div class="dashboard-chat-right">
+        <!-- Gemini AI Chat & Statement Analysis Container -->
+        <section id="ai-chat-card" class="kpi-card ai-chat-container">
+          
+          <!-- AI Chat Header Toolbar -->
+          <div class="chat-header">
+            <div class="chat-header-left">
+              <span class="ai-sparkle-icon">✨</span>
+              <div>
+                <h3 style="font-size: 0.95rem; font-weight: 600; margin: 0;">Kharach Gemini AI Chat</h3>
+                <span style="font-size: 0.72rem; color: var(--text-secondary);">Ask questions or analyze statements</span>
+              </div>
+            </div>
+
+            <div class="chat-header-right">
+              <button id="btn-clear-chat" class="btn-chat-icon" title="Clear Chat History">🗑️</button>
+            </div>
+          </div>
+
+          <!-- Chat Messages Scroll Area -->
+          <div id="chat-messages-container" class="chat-messages">
+            <div class="chat-message assistant">
+              <div class="message-avatar">✨</div>
+              <div class="message-bubble">
+                Hello! I am <strong>Kharach AI</strong>. You can paste bank statement screenshots (Ctrl+V), upload statement PDFs/images, or ask me any questions about your expenses and budget!
+                <div class="suggestion-chips-container"></div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- Spinner Animation inside Chat -->
+          <div id="analysis-spinner" class="chat-spinner-overlay hidden">
+            <div class="spinner" style="width: 22px; height: 22px;"></div>
+            <span style="font-size: 0.8rem; color: var(--text-secondary);">Gemini AI is processing your request...</span>
+          </div>
+
+          <!-- Staged Preview File Chips Container -->
+          <div id="staged-preview-wrapper" class="staged-wrapper hidden">
+            <div id="staged-previews-container" class="staged-container"></div>
+            <button id="btn-clear-staged" class="btn-clear-chips">Clear files</button>
+          </div>
+
+          <!-- Attachment Selector Drawer/Popup -->
+          <div id="attachment-menu-popup" class="attachment-popup hidden">
+            <div class="attachment-option" id="attach-option-file">
+              <span>📄</span> Upload Local File (PDF / Image)
+            </div>
+
+            <!-- Submenu Trigger for Uploaded Library -->
+            <div class="attachment-option submenu-trigger" id="attach-option-library-trigger">
+              <span>📁</span> Uploaded Library
+              <span id="library-count-badge" style="background: rgba(99,102,241,0.25); color: var(--accent-primary); border: 1px solid rgba(99,102,241,0.4); padding: 0.05rem 0.4rem; border-radius: 10px; font-size: 0.68rem; margin-left: 0.3rem;">0</span>
+              <span style="margin-left: auto; font-size: 0.75rem;">▸</span>
+
+              <!-- Flyout Next Submenu -->
+              <div id="library-submenu-popup" class="library-submenu hidden">
+                <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border-color);">
+                  Select Uploaded Document(s):
+                </div>
+                <div id="library-files-container" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.35rem;">
+                  <span style="font-size: 0.75rem; color: var(--text-secondary); padding: 0.4rem;">No uploaded documents</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Hidden legacy select fallback -->
+            <select id="existing-files-dropdown" class="hidden"><option value=""></option></select>
+          </div>
+
+          <!-- Gemini AI Floating Chat Input Bar -->
+          <div id="ai-chat-input-bar" class="chat-input-bar">
+            
+            <!-- Plus / Attachment Button -->
+            <button id="btn-toggle-attachment" class="chat-bar-btn" title="Add File or Select Document">
+              <span style="font-size: 1.1rem; font-weight: bold;">+</span>
+            </button>
+
+            <input type="file" id="file-input" multiple accept=".pdf,.png,.jpg,.jpeg" class="hidden" />
+
+            <!-- Existing File Hidden Quick Reanalyze Trigger -->
+            <button id="btn-reanalyze-existing" class="hidden"></button>
+
+            <!-- Main Chat Text Input -->
+            <textarea id="chat-input-prompt" class="chat-textarea" rows="1" placeholder="Ask Gemini..."></textarea>
+
+            <!-- Send / Action Button -->
+            <button id="btn-send-chat" class="btn-send" title="Send message">
+              <span style="font-size: 0.95rem;">➤</span>
+            </button>
+          </div>
+
+        </section>
+      </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
+
