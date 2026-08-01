@@ -40,6 +40,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.get("/api/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "service": "Kharach AI API"
+    }
+
+
 OTP_STORE: Dict[str, Dict[str, Any]] = {}
 
 PROMPT_TEXT = """
@@ -326,6 +336,8 @@ def get_admin_settings(request: Request):
         "smtp_username": get_setting_from_db("SMTP_USERNAME", ""),
         "smtp_password": get_setting_from_db("SMTP_PASSWORD", ""),
         "smtp_from_email": get_setting_from_db("SMTP_FROM_EMAIL", ""),
+        "require_mobile_otp": get_setting_from_db("REQUIRE_MOBILE_OTP", "false"),
+        "save_uploaded_files": get_setting_from_db("SAVE_UPLOADED_FILES", "false"),
     }
 
 
@@ -339,6 +351,8 @@ def save_admin_settings(
     smtp_username: str = Form(...),
     smtp_password: str = Form(...),
     smtp_from_email: str = Form(...),
+    require_mobile_otp: str = Form("false"),
+    save_uploaded_files: str = Form("false"),
 ):
     user_id = get_current_user_id(request)
     if not is_admin_user(user_id):
@@ -351,28 +365,32 @@ def save_admin_settings(
     set_setting_in_db("SMTP_USERNAME", smtp_username)
     set_setting_in_db("SMTP_PASSWORD", smtp_password)
     set_setting_in_db("SMTP_FROM_EMAIL", smtp_from_email)
+    set_setting_in_db("REQUIRE_MOBILE_OTP", require_mobile_otp)
+    set_setting_in_db("SAVE_UPLOADED_FILES", save_uploaded_files)
     return {"message": "Admin settings saved successfully"}
 
 
 
 
 @app.post("/api/send-otp")
-def send_otp(email: str = Form(...), mobile: str = Form(...)):
-    if not email or not mobile:
-        raise HTTPException(status_code=400, detail="Email and mobile number are required")
+def send_otp(email: str = Form(...), mobile: Optional[str] = Form("")):
+    if not email:
+        raise HTTPException(status_code=400, detail="Email address is required")
 
     email_otp = f"{random.randint(100000, 999999)}"
-    mobile_otp = f"{random.randint(100000, 999999)}"
-
     OTP_STORE[email] = {"otp": email_otp, "created_at": datetime.now().timestamp()}
-    OTP_STORE[mobile] = {"otp": mobile_otp, "created_at": datetime.now().timestamp()}
+
+    req_mobile = get_setting_from_db("REQUIRE_MOBILE_OTP", "false").lower() == "true"
+    if req_mobile and mobile:
+        mobile_otp = f"{random.randint(100000, 999999)}"
+        OTP_STORE[mobile] = {"otp": mobile_otp, "created_at": datetime.now().timestamp()}
+        print(f"[OTP SERVICE] Mobile OTP for {mobile}: {mobile_otp}")
 
     sent_via_smtp = send_email_otp(email, email_otp)
 
     print(f"[OTP SERVICE] Email OTP for {email}: {email_otp}")
-    print(f"[OTP SERVICE] Mobile OTP for {mobile}: {mobile_otp}")
 
-    status_msg = "Verification OTPs sent to your Email Address and Mobile Number."
+    status_msg = "Verification OTP sent to your Email Address."
     if not sent_via_smtp:
         status_msg += " (Check server log if SMTP is not configured)"
 
@@ -384,22 +402,24 @@ def signup(
     full_name: str = Form(...),
     username: str = Form(...),
     email: str = Form(...),
-    mobile: str = Form(...),
+    mobile: str = Form(""),
     password: str = Form(...),
     email_otp: str = Form(...),
-    mobile_otp: str = Form(...),
+    mobile_otp: Optional[str] = Form(""),
 ):
-    if not full_name or not username or not email or not mobile or not password:
-        raise HTTPException(status_code=400, detail="All fields are required")
+    if not full_name or not username or not email or not password:
+        raise HTTPException(status_code=400, detail="All required fields must be filled")
 
     stored_email = OTP_STORE.get(email)
-    stored_mobile = OTP_STORE.get(mobile)
 
     if not stored_email or stored_email["otp"] != email_otp:
         raise HTTPException(status_code=400, detail="Invalid or expired Email OTP")
 
-    if not stored_mobile or stored_mobile["otp"] != mobile_otp:
-        raise HTTPException(status_code=400, detail="Invalid or expired Mobile OTP")
+    req_mobile = get_setting_from_db("REQUIRE_MOBILE_OTP", "false").lower() == "true"
+    if req_mobile:
+        stored_mobile = OTP_STORE.get(mobile)
+        if not stored_mobile or stored_mobile["otp"] != mobile_otp:
+            raise HTTPException(status_code=400, detail="Invalid or expired Mobile OTP")
 
     password_hash = hash_password(password)
     try:
@@ -817,12 +837,17 @@ async def analyze_statements(
 
     inserted_count = 0
 
+    save_files_flag = get_setting_from_db("SAVE_UPLOADED_FILES", "false").lower() == "true"
+
     with get_db() as conn:
         for file in files:
             file_bytes = await file.read()
-            file_path = os.path.join(user_folder, file.filename)
-            with open(file_path, "wb") as f:
-                f.write(file_bytes)
+            if save_files_flag:
+                file_path = os.path.join(user_folder, file.filename)
+                with open(file_path, "wb") as f:
+                    f.write(file_bytes)
+            else:
+                file_path = "in_memory"
 
             mime_type = file.content_type or "application/pdf"
             if mime_type == "application/pdf" or mime_type.startswith("image/"):

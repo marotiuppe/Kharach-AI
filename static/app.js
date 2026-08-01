@@ -564,6 +564,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('admin-smtp-user').value = data.smtp_username || '';
         document.getElementById('admin-smtp-pass').value = data.smtp_password || '';
         document.getElementById('admin-smtp-from').value = data.smtp_from_email || '';
+        const reqMobileInput = document.getElementById('admin-req-mobile-otp');
+        if (reqMobileInput) reqMobileInput.value = data.require_mobile_otp || 'false';
+        const saveFilesInput = document.getElementById('admin-save-files');
+        if (saveFilesInput) saveFilesInput.value = data.save_uploaded_files || 'false';
       }
     } catch (e) {
       console.error('Failed to load settings', e);
@@ -586,6 +590,10 @@ document.addEventListener('DOMContentLoaded', () => {
     formData.append('smtp_username', document.getElementById('admin-smtp-user').value);
     formData.append('smtp_password', document.getElementById('admin-smtp-pass').value);
     formData.append('smtp_from_email', document.getElementById('admin-smtp-from').value);
+    const reqMobileInput = document.getElementById('admin-req-mobile-otp');
+    if (reqMobileInput) formData.append('require_mobile_otp', reqMobileInput.value);
+    const saveFilesInput = document.getElementById('admin-save-files');
+    if (saveFilesInput) formData.append('save_uploaded_files', saveFilesInput.value);
 
     try {
       const res = await fetch('/api/admin/settings', { method: 'POST', body: formData });
