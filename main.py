@@ -247,7 +247,7 @@ init_db()
 
 def send_email_otp(to_email: str, otp_code: str) -> bool:
     smtp_server = get_setting_from_db("SMTP_SERVER", "smtp.gmail.com")
-    smtp_port = int(get_setting_from_db("SMTP_PORT", "587"))
+    smtp_port = int(get_setting_from_db("SMTP_PORT", "465"))
     smtp_user = get_setting_from_db("SMTP_USERNAME", "")
     smtp_pass = get_setting_from_db("SMTP_PASSWORD", "")
     from_email = get_setting_from_db("SMTP_FROM_EMAIL", smtp_user or "noreply@kharach.ai")
@@ -277,8 +277,12 @@ def send_email_otp(to_email: str, otp_code: str) -> bool:
         """
         msg.attach(MIMEText(body, "html"))
 
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=10)
+        else:
+            server = smtplib.SMTP(smtp_server, smtp_port, timeout=10)
+            server.starttls()
+
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
         server.quit()
