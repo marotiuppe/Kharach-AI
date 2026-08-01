@@ -401,12 +401,12 @@
         </div>
 
         <div class="form-group">
-          <label for="signup-mobile">Mobile Number</label>
-          <input type="tel" id="signup-mobile" class="form-input" placeholder="10-digit mobile number" required />
+          <label id="signup-mobile-label" for="signup-mobile">Mobile Number (Optional)</label>
+          <input type="tel" id="signup-mobile" class="form-input" placeholder="10-digit mobile number" />
         </div>
 
         <div style="margin-bottom: 1.25rem;">
-          <button type="button" id="btn-send-otp" class="btn btn-secondary" style="width: 100%;">Send Verification OTPs</button>
+          <button type="button" id="btn-send-otp" class="btn btn-secondary" style="width: 100%;">Send Verification OTP</button>
           <p id="otp-send-status" style="font-size: 0.8rem; margin-top: 0.4rem; color: var(--accent-success);" class="hidden"></p>
         </div>
 
@@ -416,9 +416,9 @@
             <input type="text" id="signup-email-otp" class="form-input" placeholder="Enter 6-digit Email OTP" required />
           </div>
 
-          <div class="form-group">
+          <div id="signup-mobile-otp-group" class="form-group hidden">
             <label for="signup-mobile-otp">Mobile OTP</label>
-            <input type="text" id="signup-mobile-otp" class="form-input" placeholder="Enter 6-digit Mobile OTP" required />
+            <input type="text" id="signup-mobile-otp" class="form-input" placeholder="Enter 6-digit Mobile OTP" />
           </div>
         </div>
 

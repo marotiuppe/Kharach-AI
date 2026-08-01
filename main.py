@@ -50,6 +50,14 @@ def health_check():
     }
 
 
+@app.get("/api/config")
+def get_public_config():
+    return {
+        "require_mobile_otp": get_setting_from_db("REQUIRE_MOBILE_OTP", "false").lower() == "true",
+        "save_uploaded_files": get_setting_from_db("SAVE_UPLOADED_FILES", "false").lower() == "true",
+    }
+
+
 OTP_STORE: Dict[str, Dict[str, Any]] = {}
 
 PROMPT_TEXT = """

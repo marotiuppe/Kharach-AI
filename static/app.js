@@ -682,12 +682,43 @@ document.addEventListener('DOMContentLoaded', () => {
     if (navUserSection) navUserSection.classList.add('hidden');
   }
 
+  async function fetchAppConfig() {
+    try {
+      const res = await fetch('/api/config');
+      const data = await res.json();
+      const reqMobile = data.require_mobile_otp === true;
+
+      const mobileInput = document.getElementById('signup-mobile');
+      const mobileLabel = document.getElementById('signup-mobile-label');
+      const mobileOtpGroup = document.getElementById('signup-mobile-otp-group');
+      const mobileOtpInput = document.getElementById('signup-mobile-otp');
+
+      if (reqMobile) {
+        if (mobileLabel) mobileLabel.textContent = 'Mobile Number';
+        if (mobileInput) mobileInput.setAttribute('required', 'required');
+        if (mobileOtpGroup) mobileOtpGroup.classList.remove('hidden');
+        if (mobileOtpInput) mobileOtpInput.setAttribute('required', 'required');
+        if (btnSendOtp) btnSendOtp.textContent = 'Send Verification OTPs';
+      } else {
+        if (mobileLabel) mobileLabel.textContent = 'Mobile Number (Optional)';
+        if (mobileInput) mobileInput.removeAttribute('required');
+        if (mobileOtpGroup) mobileOtpGroup.classList.add('hidden');
+        if (mobileOtpInput) mobileOtpInput.removeAttribute('required');
+        if (btnSendOtp) btnSendOtp.textContent = 'Send Verification OTP';
+      }
+    } catch (e) {
+      console.warn('Could not fetch app config:', e);
+    }
+  }
+
   function showAuth(mode = 'login') {
     if (landingScreen) landingScreen.classList.add('hidden');
     if (authScreen) authScreen.classList.remove('hidden');
     if (dashboardScreen) dashboardScreen.classList.add('hidden');
     if (navPublicSection) navPublicSection.classList.remove('hidden');
     if (navUserSection) navUserSection.classList.add('hidden');
+
+    fetchAppConfig();
 
     if (mode === 'signup') {
       if (tabSignupBtn) tabSignupBtn.click();
@@ -795,14 +826,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const email = document.getElementById('signup-email').value;
     const mobile = document.getElementById('signup-mobile').value;
 
-    if (!email || !mobile) {
-      alert('Please enter both Email Address and Mobile Number first.');
+    if (!email) {
+      alert('Please enter your Email Address first.');
       return;
     }
 
     const formData = new FormData();
     formData.append('email', email);
-    formData.append('mobile', mobile);
+    if (mobile) formData.append('mobile', mobile);
 
     try {
       const res = await fetch('/api/send-otp', { method: 'POST', body: formData });
