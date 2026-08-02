@@ -6,7 +6,9 @@ import os
 import random
 import secrets
 import smtplib
+import socket
 import sqlite3
+import ssl
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -87,6 +89,7 @@ Parsing Rules:
 
 def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_FILE)
+    conn.execute("PRAGMA foreign_keys = ON;")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -233,6 +236,102 @@ def init_db() -> None:
             );
             """
         )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS contacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                phone TEXT DEFAULT '',
+                email TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            );
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS debts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                contact_id INTEGER NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('GAVE', 'GOT')),
+                amount REAL NOT NULL DEFAULT 0.0,
+                note TEXT DEFAULT '',
+                date TEXT NOT NULL,
+                due_date TEXT DEFAULT '',
+                status TEXT DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'SETTLED')),
+                linked_transaction_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE CASCADE,
+                FOREIGN KEY (linked_transaction_id) REFERENCES transactions (id) ON DELETE SET NULL
+            );
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                currency TEXT DEFAULT 'INR',
+                description TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            );
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS group_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                contact_id INTEGER,
+                phone TEXT DEFAULT '',
+                email TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE,
+                FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE SET NULL
+            );
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS group_expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                paid_by_member_id INTEGER NOT NULL,
+                amount REAL NOT NULL DEFAULT 0.0,
+                title TEXT NOT NULL,
+                category TEXT DEFAULT 'Others',
+                date TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE,
+                FOREIGN KEY (paid_by_member_id) REFERENCES group_members (id) ON DELETE CASCADE
+            );
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS group_expense_splits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                expense_id INTEGER NOT NULL,
+                member_id INTEGER NOT NULL,
+                split_amount REAL NOT NULL DEFAULT 0.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (expense_id) REFERENCES group_expenses (id) ON DELETE CASCADE,
+                FOREIGN KEY (member_id) REFERENCES group_members (id) ON DELETE CASCADE
+            );
+            """
+        )
         conn.commit()
 
 
@@ -253,9 +352,31 @@ init_db()
 
 
 
+def create_ipv4_socket(host: str, port: int, timeout: float = 10.0) -> socket.socket:
+    """Force IPv4 socket resolution to prevent Render/Cloud IPv6 unreachable errors."""
+    infos = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+    last_err = None
+    for family, socktype, proto, _, sockaddr in infos:
+        try:
+            s = socket.socket(family, socktype, proto)
+            s.settimeout(timeout)
+            s.connect(sockaddr)
+            return s
+        except Exception as e:
+            last_err = e
+    if last_err:
+        raise last_err
+    raise socket.error(f"Could not connect to {host}:{port} via IPv4")
+
+
 def send_email_otp(to_email: str, otp_code: str) -> bool:
     smtp_server = get_setting_from_db("SMTP_SERVER", "smtp.gmail.com")
-    smtp_port = int(get_setting_from_db("SMTP_PORT", "465"))
+    smtp_port_raw = get_setting_from_db("SMTP_PORT", "587")
+    try:
+        smtp_port = int(smtp_port_raw)
+    except (ValueError, TypeError):
+        smtp_port = 587
+
     smtp_user = get_setting_from_db("SMTP_USERNAME", "")
     smtp_pass = get_setting_from_db("SMTP_PASSWORD", "")
     from_email = get_setting_from_db("SMTP_FROM_EMAIL", smtp_user or "noreply@kharach.ai")
@@ -264,40 +385,53 @@ def send_email_otp(to_email: str, otp_code: str) -> bool:
         print(f"[SMTP WARNING] Credentials missing. Logging Email OTP for {to_email}: {otp_code}")
         return False
 
-    try:
-        msg = MIMEMultipart()
-        msg["From"] = from_email
-        msg["To"] = to_email
-        msg["Subject"] = f"Kharach AI — Your Verification Code: {otp_code}"
+    msg = MIMEMultipart()
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg["Subject"] = f"Kharach AI — Your Verification Code: {otp_code}"
 
-        body = f"""
-        <html>
-          <body style="font-family: Arial, sans-serif; background-color: #0a0c10; color: #f0f4f8; padding: 20px;">
-            <div style="max-width: 500px; margin: auto; background-color: #12161f; padding: 25px; border-radius: 10px; border: 1px solid #222;">
-              <h2 style="color: #6366f1; text-align: center;">💡 Kharach AI</h2>
-              <p>Hello,</p>
-              <p>Your verification code for Kharach AI is:</p>
-              <h1 style="text-align: center; color: #10b981; letter-spacing: 5px; font-size: 32px;">{otp_code}</h1>
-              <p>This code will expire in 10 minutes. Do not share this OTP with anyone.</p>
-            </div>
-          </body>
-        </html>
-        """
-        msg.attach(MIMEText(body, "html"))
+    body = f"""
+    <html>
+      <body style="font-family: Arial, sans-serif; background-color: #0a0c10; color: #f0f4f8; padding: 20px;">
+        <div style="max-width: 500px; margin: auto; background-color: #12161f; padding: 25px; border-radius: 10px; border: 1px solid #222;">
+          <h2 style="color: #6366f1; text-align: center;">💡 Kharach AI</h2>
+          <p>Hello,</p>
+          <p>Your verification code for Kharach AI is:</p>
+          <h1 style="text-align: center; color: #10b981; letter-spacing: 5px; font-size: 32px;">{otp_code}</h1>
+          <p>This code will expire in 10 minutes. Do not share this OTP with anyone.</p>
+        </div>
+      </body>
+    </html>
+    """
+    msg.attach(MIMEText(body, "html"))
 
-        if smtp_port == 465:
-            server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=10)
-        else:
-            server = smtplib.SMTP(smtp_server, smtp_port, timeout=10)
-            server.starttls()
+    # Fallback list: try configured port first, then alternative port (587 vs 465)
+    ports_to_try = [smtp_port]
+    alt_port = 587 if smtp_port == 465 else 465
+    if alt_port not in ports_to_try:
+        ports_to_try.append(alt_port)
 
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
-        server.quit()
-        return True
-    except Exception as e:
-        print(f"[SMTP ERROR] Failed to send email to {to_email}: {e}")
-        return False
+    for p in ports_to_try:
+        try:
+            print(f"[SMTP ATTEMPT] Connecting to {smtp_server}:{p} via IPv4 socket...")
+            raw_sock = create_ipv4_socket(smtp_server, p, timeout=10.0)
+            if p == 465:
+                context = ssl.create_default_context()
+                server = smtplib.SMTP_SSL(smtp_server, p, sock=raw_sock, context=context)
+            else:
+                server = smtplib.SMTP(smtp_server, p, sock=raw_sock)
+                server.starttls()
+
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+            server.quit()
+            print(f"[SMTP SUCCESS] Email OTP sent to {to_email} via port {p}")
+            return True
+        except Exception as err:
+            print(f"[SMTP ATTEMPT FAILED] Server {smtp_server}:{p} error: {err}")
+
+    print(f"[SMTP ERROR] All SMTP connection attempts failed for {to_email}. Fallback OTP: {otp_code}")
+    return False
 
 
 def get_current_user_id(request: Request) -> int:
@@ -1392,6 +1526,484 @@ def export_excel(
         headers={"Content-Disposition": "attachment; filename=kharach_statement.xlsx"},
     )
 
+
+# --- KHATABOOK / UDHAR LEDGER MODULE ENDPOINTS ---
+
+@app.get("/api/contacts")
+def get_contacts(request: Request):
+    user_id = get_current_user_id(request)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT c.id, c.name, c.phone, c.email, c.created_at,
+                   COALESCE(SUM(CASE WHEN d.type = 'GAVE' AND d.status = 'PENDING' THEN d.amount ELSE 0 END), 0.0) as total_gave,
+                   COALESCE(SUM(CASE WHEN d.type = 'GOT' AND d.status = 'PENDING' THEN d.amount ELSE 0 END), 0.0) as total_got
+            FROM contacts c
+            LEFT JOIN debts d ON c.id = d.contact_id AND d.user_id = c.user_id
+            WHERE c.user_id = ?
+            GROUP BY c.id
+            ORDER BY c.name ASC
+            """,
+            (user_id,),
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+
+        total_will_get = 0.0
+        total_will_give = 0.0
+        for r in rows:
+            net = r["total_gave"] - r["total_got"]
+            r["net_balance"] = net
+            if net > 0:
+                total_will_get += net
+            elif net < 0:
+                total_will_give += abs(net)
+
+        return {
+            "contacts": rows,
+            "total_will_get": round(total_will_get, 2),
+            "total_will_give": round(total_will_give, 2),
+            "overall_net": round(total_will_get - total_will_give, 2),
+        }
+
+
+@app.post("/api/contacts")
+def create_contact(
+    request: Request,
+    name: str = Form(...),
+    phone: str = Form(""),
+    email: str = Form(""),
+):
+    user_id = get_current_user_id(request)
+    name_clean = name.strip()
+    if not name_clean:
+        raise HTTPException(status_code=400, detail="Contact name is required")
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO contacts (user_id, name, phone, email) VALUES (?, ?, ?, ?)",
+            (user_id, name_clean, phone.strip(), email.strip()),
+        )
+        conn.commit()
+        return {"message": "Contact created successfully", "id": cursor.lastrowid}
+
+
+@app.delete("/api/contacts/{contact_id}")
+def delete_contact(contact_id: int, request: Request):
+    user_id = get_current_user_id(request)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM contacts WHERE id = ? AND user_id = ?", (contact_id, user_id))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        conn.commit()
+        return {"message": "Contact and associated ledger deleted successfully"}
+
+
+@app.get("/api/contacts/{contact_id}/debts")
+def get_contact_debts(contact_id: int, request: Request):
+    user_id = get_current_user_id(request)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM contacts WHERE id = ? AND user_id = ?", (contact_id, user_id))
+        contact = cursor.fetchone()
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+
+        cursor.execute(
+            """
+            SELECT d.*, t.recipient_or_sender as tx_recipient, t.particulars_note as tx_note
+            FROM debts d
+            LEFT JOIN transactions t ON d.linked_transaction_id = t.id
+            WHERE d.contact_id = ? AND d.user_id = ?
+            ORDER BY d.date DESC, d.id DESC
+            """,
+            (contact_id, user_id),
+        )
+        debts = [dict(r) for r in cursor.fetchall()]
+
+        total_gave = sum(r["amount"] for r in debts if r["type"] == "GAVE" and r["status"] == "PENDING")
+        total_got = sum(r["amount"] for r in debts if r["type"] == "GOT" and r["status"] == "PENDING")
+        net = total_gave - total_got
+
+        return {
+            "contact": dict(contact),
+            "debts": debts,
+            "total_gave": round(total_gave, 2),
+            "total_got": round(total_got, 2),
+            "net_balance": round(net, 2),
+        }
+
+
+@app.post("/api/debts")
+def add_debt(
+    request: Request,
+    contact_id: int = Form(...),
+    debt_type: str = Form(...),  # GAVE or GOT
+    amount: float = Form(...),
+    note: str = Form(""),
+    date: str = Form(...),
+    due_date: str = Form(""),
+):
+    user_id = get_current_user_id(request)
+    if debt_type not in ("GAVE", "GOT"):
+        raise HTTPException(status_code=400, detail="Debt type must be 'GAVE' or 'GOT'")
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM contacts WHERE id = ? AND user_id = ?", (contact_id, user_id))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Contact not found")
+
+        cursor.execute(
+            """
+            INSERT INTO debts (user_id, contact_id, type, amount, note, date, due_date, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')
+            """,
+            (user_id, contact_id, debt_type, amount, note.strip(), date, due_date.strip()),
+        )
+        conn.commit()
+        return {"message": "Debt entry recorded successfully", "id": cursor.lastrowid}
+
+
+@app.put("/api/debts/{debt_id}/settle")
+def settle_debt(
+    debt_id: int,
+    request: Request,
+    status_flag: str = Form("SETTLED"),  # SETTLED or PENDING
+):
+    user_id = get_current_user_id(request)
+    if status_flag not in ("SETTLED", "PENDING"):
+        raise HTTPException(status_code=400, detail="Status must be SETTLED or PENDING")
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE debts SET status = ? WHERE id = ? AND user_id = ?", (status_flag, debt_id, user_id))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Debt entry not found")
+        conn.commit()
+        return {"message": f"Debt marked as {status_flag}"}
+
+
+@app.delete("/api/debts/{debt_id}")
+def delete_debt(debt_id: int, request: Request):
+    user_id = get_current_user_id(request)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM debts WHERE id = ? AND user_id = ?", (debt_id, user_id))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Debt entry not found")
+        conn.commit()
+        return {"message": "Debt entry deleted successfully"}
+
+
+@app.post("/api/debts/reconcile")
+def reconcile_transaction(
+    request: Request,
+    contact_id: int = Form(...),
+    transaction_id: int = Form(...),
+    debt_type: str = Form("GAVE"),  # GAVE or GOT
+):
+    user_id = get_current_user_id(request)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM transactions WHERE id = ? AND user_id = ?", (transaction_id, user_id))
+        tx = cursor.fetchone()
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+
+        cursor.execute("SELECT id FROM contacts WHERE id = ? AND user_id = ?", (contact_id, user_id))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Contact not found")
+
+        amount = float(tx["debit_amount"]) if tx["debit_amount"] > 0 else float(tx["credit_amount"])
+        note = f"Linked Tx: {tx['recipient_or_sender']} - {tx['particulars_note']}"
+        date = str(tx["date"] or "")
+
+        cursor.execute(
+            """
+            INSERT INTO debts (user_id, contact_id, type, amount, note, date, status, linked_transaction_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
+            """,
+            (user_id, contact_id, debt_type, amount, note, date, transaction_id),
+        )
+        conn.commit()
+        return {"message": "Transaction reconciled with contact Udhar ledger"}
+
+
+# --- GROUP & EVENT EXPENSE SPLITTING (SPLITWISE MODULE) ENDPOINTS ---
+
+def calculate_minimal_debt_settlements(net_balances: Dict[int, float], member_names: Dict[int, str]) -> List[Dict[str, Any]]:
+    """Greedy debt minimization algorithm for group expenses."""
+    debtors = []   # net < 0
+    creditors = [] # net > 0
+
+    for m_id, net in net_balances.items():
+        rounded_net = round(net, 2)
+        if rounded_net < -0.01:
+            debtors.append({"id": m_id, "amount": -rounded_net})
+        elif rounded_net > 0.01:
+            creditors.append({"id": m_id, "amount": rounded_net})
+
+    # Sort descending by amount
+    debtors.sort(key=lambda x: x["amount"], reverse=True)
+    creditors.sort(key=lambda x: x["amount"], reverse=True)
+
+    settlements = []
+    i, j = 0, 0
+
+    while i < len(debtors) and j < len(creditors):
+        debtor = debtors[i]
+        creditor = creditors[j]
+
+        settle_amt = min(debtor["amount"], creditor["amount"])
+        settle_amt_round = round(settle_amt, 2)
+
+        if settle_amt_round > 0:
+            settlements.append({
+                "from_member_id": debtor["id"],
+                "from_name": member_names.get(debtor["id"], f"Member #{debtor['id']}"),
+                "to_member_id": creditor["id"],
+                "to_name": member_names.get(creditor["id"], f"Member #{creditor['id']}"),
+                "amount": settle_amt_round,
+            })
+
+        debtor["amount"] -= settle_amt
+        creditor["amount"] -= settle_amt
+
+        if round(debtor["amount"], 2) <= 0:
+            i += 1
+        if round(creditor["amount"], 2) <= 0:
+            j += 1
+
+    return settlements
+
+
+@app.get("/api/groups")
+def get_groups(request: Request):
+    user_id = get_current_user_id(request)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT g.id, g.name, g.currency, g.description, g.created_at,
+                   COUNT(DISTINCT m.id) as member_count,
+                   COALESCE(SUM(DISTINCT e.amount), 0.0) as total_expenses
+            FROM groups g
+            LEFT JOIN group_members m ON g.id = m.group_id
+            LEFT JOIN group_expenses e ON g.id = e.group_id
+            WHERE g.user_id = ?
+            GROUP BY g.id
+            ORDER BY g.created_at DESC
+            """,
+            (user_id,),
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+        return {"groups": rows}
+
+
+@app.post("/api/groups")
+def create_group(
+    request: Request,
+    name: str = Form(...),
+    currency: str = Form("INR"),
+    description: str = Form(""),
+    member_names: str = Form(...), # Comma separated or JSON list
+):
+    user_id = get_current_user_id(request)
+    clean_name = name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Group name is required")
+
+    # Parse members
+    m_list = []
+    if member_names.startswith("["):
+        try:
+            m_list = json.loads(member_names)
+        except Exception:
+            m_list = [x.strip() for x in member_names.split(",") if x.strip()]
+    else:
+        m_list = [x.strip() for x in member_names.split(",") if x.strip()]
+
+    if not m_list:
+        raise HTTPException(status_code=400, detail="At least one group member is required")
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO groups (user_id, name, currency, description) VALUES (?, ?, ?, ?)",
+            (user_id, clean_name, currency.strip() or "INR", description.strip()),
+        )
+        group_id = cursor.lastrowid
+
+        for m in m_list:
+            m_name = m if isinstance(m, str) else m.get("name", "Member")
+            cursor.execute(
+                "INSERT INTO group_members (group_id, name) VALUES (?, ?)",
+                (group_id, m_name.strip()),
+            )
+
+        conn.commit()
+        return {"message": "Group created successfully", "group_id": group_id}
+
+
+@app.delete("/api/groups/{group_id}")
+def delete_group(group_id: int, request: Request):
+    user_id = get_current_user_id(request)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM groups WHERE id = ? AND user_id = ?", (group_id, user_id))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Group not found")
+        conn.commit()
+        return {"message": "Group deleted successfully"}
+
+
+@app.get("/api/groups/{group_id}")
+def get_group_details(group_id: int, request: Request):
+    user_id = get_current_user_id(request)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM groups WHERE id = ? AND user_id = ?", (group_id, user_id))
+        group = cursor.fetchone()
+        if not group:
+            raise HTTPException(status_code=404, detail="Group not found")
+
+        # Members
+        cursor.execute("SELECT * FROM group_members WHERE group_id = ? ORDER BY name ASC", (group_id,))
+        members = [dict(r) for r in cursor.fetchall()]
+        member_names = {m["id"]: m["name"] for m in members}
+
+        # Expenses
+        cursor.execute(
+            """
+            SELECT e.*, m.name as paid_by_name
+            FROM group_expenses e
+            JOIN group_members m ON e.paid_by_member_id = m.id
+            WHERE e.group_id = ?
+            ORDER BY e.date DESC, e.id DESC
+            """,
+            (group_id,),
+        )
+        expenses = [dict(r) for r in cursor.fetchall()]
+
+        # Fetch splits for each expense
+        net_balances = {m["id"]: 0.0 for m in members}
+        total_group_spend = 0.0
+
+        for exp in expenses:
+            total_group_spend += float(exp["amount"])
+            paid_by_id = exp["paid_by_member_id"]
+            net_balances[paid_by_id] = net_balances.get(paid_by_id, 0.0) + float(exp["amount"])
+
+            cursor.execute(
+                """
+                SELECT s.*, m.name as member_name
+                FROM group_expense_splits s
+                JOIN group_members m ON s.member_id = m.id
+                WHERE s.expense_id = ?
+                """,
+                (exp["id"],),
+            )
+            splits = [dict(r) for r in cursor.fetchall()]
+            exp["splits"] = splits
+
+            for s in splits:
+                m_id = s["member_id"]
+                s_amt = float(s["split_amount"])
+                net_balances[m_id] = net_balances.get(m_id, 0.0) - s_amt
+
+        # Compute minimal settlement graph transfers
+        settlements = calculate_minimal_debt_settlements(net_balances, member_names)
+
+        member_summaries = []
+        for m in members:
+            m_id = m["id"]
+            net = round(net_balances.get(m_id, 0.0), 2)
+            member_summaries.append({
+                "id": m_id,
+                "name": m["name"],
+                "net_balance": net,
+            })
+
+        return {
+            "group": dict(group),
+            "members": member_summaries,
+            "expenses": expenses,
+            "total_spend": round(total_group_spend, 2),
+            "settlements": settlements,
+        }
+
+
+@app.post("/api/groups/{group_id}/expenses")
+def add_group_expense(
+    group_id: int,
+    request: Request,
+    title: str = Form(...),
+    amount: float = Form(...),
+    paid_by_member_id: int = Form(...),
+    category: str = Form("Others"),
+    date: str = Form(...),
+    splits_json: str = Form(...), # JSON object: {"member_id": split_amount}
+):
+    user_id = get_current_user_id(request)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Expense amount must be greater than zero")
+
+    try:
+        splits_dict = json.loads(splits_json)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid expense split format")
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM groups WHERE id = ? AND user_id = ?", (group_id, user_id))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Group not found")
+
+        cursor.execute(
+            """
+            INSERT INTO group_expenses (group_id, paid_by_member_id, amount, title, category, date)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (group_id, paid_by_member_id, amount, title.strip(), category, date),
+        )
+        expense_id = cursor.lastrowid
+
+        for m_id_str, s_amt in splits_dict.items():
+            s_amt_val = float(s_amt)
+            if s_amt_val > 0:
+                cursor.execute(
+                    """
+                    INSERT INTO group_expense_splits (expense_id, member_id, split_amount)
+                    VALUES (?, ?, ?)
+                    """,
+                    (expense_id, int(m_id_str), s_amt_val),
+                )
+
+        conn.commit()
+        return {"message": "Group expense added successfully", "expense_id": expense_id}
+
+
+@app.delete("/api/group-expenses/{expense_id}")
+def delete_group_expense(expense_id: int, request: Request):
+    user_id = get_current_user_id(request)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM group_expenses
+            WHERE id = ? AND group_id IN (SELECT id FROM groups WHERE user_id = ?)
+            """,
+            (expense_id, user_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Expense not found")
+        conn.commit()
+        return {"message": "Group expense deleted successfully"}
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

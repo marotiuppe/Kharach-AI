@@ -183,6 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabBtnRecurring = document.getElementById('tab-btn-recurring');
   const tabBtnBudget = document.getElementById('tab-btn-budget');
   const tabBtnLarge = document.getElementById('tab-btn-large');
+  const tabBtnUdhar = document.getElementById('tab-btn-udhar');
+  const tabBtnGroups = document.getElementById('tab-btn-groups');
 
   const tabContentLedger = document.getElementById('tab-content-ledger');
   const tabContentAnalytics = document.getElementById('tab-content-analytics');
@@ -191,6 +193,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabContentRecurring = document.getElementById('tab-content-recurring');
   const tabContentBudget = document.getElementById('tab-content-budget');
   const tabContentLarge = document.getElementById('tab-content-large');
+  const tabContentUdhar = document.getElementById('tab-content-udhar');
+  const tabContentGroups = document.getElementById('tab-content-groups');
 
   // Filter Elements
   const filterType = document.getElementById('filter-type');
@@ -1484,8 +1488,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Dashboard Tabs Switcher
-  const allTabBtns = [tabBtnLedger, tabBtnAnalytics, tabBtnMerchants, tabBtnCashflow, tabBtnRecurring, tabBtnBudget, tabBtnLarge];
-  const allTabContents = [tabContentLedger, tabContentAnalytics, tabContentMerchants, tabContentCashflow, tabContentRecurring, tabContentBudget, tabContentLarge];
+  const allTabBtns = [tabBtnLedger, tabBtnAnalytics, tabBtnMerchants, tabBtnCashflow, tabBtnRecurring, tabBtnBudget, tabBtnLarge, tabBtnUdhar, tabBtnGroups];
+  const allTabContents = [tabContentLedger, tabContentAnalytics, tabContentMerchants, tabContentCashflow, tabContentRecurring, tabContentBudget, tabContentLarge, tabContentUdhar, tabContentGroups];
 
   tabBtnLedger.addEventListener('click', () => switchTab(tabBtnLedger, tabContentLedger));
   tabBtnAnalytics.addEventListener('click', () => switchTab(tabBtnAnalytics, tabContentAnalytics));
@@ -1494,6 +1498,18 @@ document.addEventListener('DOMContentLoaded', () => {
   tabBtnRecurring.addEventListener('click', () => switchTab(tabBtnRecurring, tabContentRecurring));
   tabBtnBudget.addEventListener('click', () => switchTab(tabBtnBudget, tabContentBudget));
   tabBtnLarge.addEventListener('click', () => switchTab(tabBtnLarge, tabContentLarge));
+  if (tabBtnUdhar) {
+    tabBtnUdhar.addEventListener('click', () => {
+      switchTab(tabBtnUdhar, tabContentUdhar, false);
+      loadUdharModule();
+    });
+  }
+  if (tabBtnGroups) {
+    tabBtnGroups.addEventListener('click', () => {
+      switchTab(tabBtnGroups, tabContentGroups, false);
+      loadGroupsModule();
+    });
+  }
 
   function switchTab(btn, content, clearFiltersOnSwitch = true) {
     allTabBtns.forEach(b => b && b.classList.remove('active'));
@@ -1738,9 +1754,12 @@ document.addEventListener('DOMContentLoaded', () => {
         <td><span class="${t.type === 'DEBIT' ? 'badge-debit' : 'badge-credit'}">${t.type}</span></td>
         <td>${escapeHtml(t.category || 'Others')}</td>
         <td><span class="user-badge" style="font-size: 0.72rem; padding: 0.15rem 0.45rem; background: rgba(99,102,241,0.12); color: var(--accent-primary); border: 1px solid rgba(99,102,241,0.3); white-space: nowrap;">${escapeHtml(t.account_name || 'General')}</span></td>
-        <td style="text-align: center;">
-          <button class="btn-edit-tx" data-id="${t.id}" title="Edit transaction" style="background: none; border: none; cursor: pointer; color: var(--accent-primary); padding: 0.2rem 0.35rem; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;">
+        <td style="text-align: center; white-space: nowrap;">
+          <button class="btn-edit-tx" data-id="${t.id}" title="Edit transaction" style="background: none; border: none; cursor: pointer; color: var(--accent-primary); padding: 0.2rem 0.25rem; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          </button>
+          <button class="btn-reconcile-tx" data-id="${t.id}" title="Link to Udhar Contact" style="background: none; border: none; cursor: pointer; color: var(--accent-success); padding: 0.2rem 0.25rem; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; font-size: 0.85rem;">
+            📗
           </button>
         </td>
       </tr>
@@ -1763,6 +1782,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const id = parseInt(btn.getAttribute('data-id'), 10);
         const tx = currentTransactions.find(x => x.id === id);
         if (tx) openTxModal(tx);
+      });
+    });
+
+    ledgerTableBody.querySelectorAll('.btn-reconcile-tx').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = parseInt(btn.getAttribute('data-id'), 10);
+        const tx = currentTransactions.find(x => x.id === id);
+        if (tx && window.openReconcileModal) {
+          const desc = `${tx.recipient_or_sender || 'Tx'} (₹${(tx.debit_amount || tx.credit_amount || 0).toFixed(2)})`;
+          window.openReconcileModal(id, desc);
+        }
       });
     });
 
@@ -2331,5 +2361,804 @@ document.addEventListener('DOMContentLoaded', () => {
       if (e.touches && e.touches[0]) onMove(e.touches[0].clientX);
     }, { passive: true });
     document.addEventListener('touchend', stopDragging);
+  }
+
+
+  // ==========================================================================
+  // KHATABOOK / UDHAR LEDGER MODULE LOGIC
+  // ==========================================================================
+
+  let udharContacts = [];
+  let activeUdharContactId = null;
+
+  const udharKpiGet = document.getElementById('udhar-kpi-get');
+  const udharKpiGive = document.getElementById('udhar-kpi-give');
+  const udharKpiNet = document.getElementById('udhar-kpi-net');
+  const udharKpiContacts = document.getElementById('udhar-kpi-contacts');
+  const udharContactsList = document.getElementById('udhar-contacts-list');
+  const udharContactSearch = document.getElementById('udhar-contact-search');
+
+  const udharContactEmptyState = document.getElementById('udhar-contact-empty-state');
+  const udharContactActiveView = document.getElementById('udhar-contact-active-view');
+  const udharActiveName = document.getElementById('udhar-active-name');
+  const udharActiveDetails = document.getElementById('udhar-active-details');
+  const udharActiveNet = document.getElementById('udhar-active-net');
+  const udharDebtsTableBody = document.getElementById('udhar-debts-table-body');
+
+  const btnOpenAddContact = document.getElementById('btn-open-add-contact');
+  const btnDeleteActiveContact = document.getElementById('btn-delete-active-contact');
+  const btnUdharAddGave = document.getElementById('btn-udhar-add-gave');
+  const btnUdharAddGot = document.getElementById('btn-udhar-add-got');
+
+  // Modals
+  const udharContactModal = document.getElementById('udhar-contact-modal');
+  const btnCloseUdharContactModal = document.getElementById('btn-close-udhar-contact-modal');
+  const formUdharContact = document.getElementById('form-udhar-contact');
+
+  const udharEntryModal = document.getElementById('udhar-entry-modal');
+  const btnCloseUdharEntryModal = document.getElementById('btn-close-udhar-entry-modal');
+  const formUdharEntry = document.getElementById('form-udhar-entry');
+
+  const udharReconcileModal = document.getElementById('udhar-reconcile-modal');
+  const btnCloseReconcileModal = document.getElementById('btn-close-reconcile-modal');
+  const formUdharReconcile = document.getElementById('form-udhar-reconcile');
+
+  async function loadUdharModule() {
+    try {
+      const res = await fetch('/api/contacts');
+      const data = await res.json();
+      if (!res.ok) return;
+
+      udharContacts = data.contacts || [];
+      if (udharKpiGet) udharKpiGet.textContent = `₹${(data.total_will_get || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+      if (udharKpiGive) udharKpiGive.textContent = `₹${(data.total_will_give || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+      if (udharKpiNet) udharKpiNet.textContent = `₹${(data.overall_net || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+      if (udharKpiContacts) udharKpiContacts.textContent = udharContacts.length;
+
+      renderContactsList();
+
+      if (activeUdharContactId) {
+        const activeExists = udharContacts.some(c => c.id === activeUdharContactId);
+        if (activeExists) {
+          await selectUdharContact(activeUdharContactId);
+        } else {
+          activeUdharContactId = null;
+          showUdharEmptyState();
+        }
+      } else {
+        showUdharEmptyState();
+      }
+    } catch (err) {
+      console.error('Failed to load Udhar module', err);
+    }
+  }
+
+  function renderContactsList() {
+    if (!udharContactsList) return;
+    const query = (udharContactSearch ? udharContactSearch.value : '').toLowerCase().trim();
+    const filtered = udharContacts.filter(c => c.name.toLowerCase().includes(query) || (c.phone && c.phone.includes(query)));
+
+    if (filtered.length === 0) {
+      udharContactsList.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.82rem; text-align: center; padding: 1.5rem 0;">No matching contacts found.</div>`;
+      return;
+    }
+
+    udharContactsList.innerHTML = filtered.map(c => {
+      const net = c.net_balance || 0;
+      let badgeHtml = '';
+      if (net > 0) {
+        badgeHtml = `<span class="badge-got">Get ₹${net.toFixed(2)}</span>`;
+      } else if (net < 0) {
+        badgeHtml = `<span class="badge-gave">Give ₹${Math.abs(net).toFixed(2)}</span>`;
+      } else {
+        badgeHtml = `<span class="badge-settled">Settled</span>`;
+      }
+
+      const isActive = c.id === activeUdharContactId;
+      return `
+        <div class="udhar-contact-item ${isActive ? 'active' : ''}" data-id="${c.id}">
+          <div>
+            <div style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary);">${escapeHtml(c.name)}</div>
+            <div style="font-size: 0.72rem; color: var(--text-secondary);">${escapeHtml(c.phone || c.email || 'No phone')}</div>
+          </div>
+          <div>${badgeHtml}</div>
+        </div>
+      `;
+    }).join('');
+
+    udharContactsList.querySelectorAll('.udhar-contact-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const id = parseInt(item.getAttribute('data-id'), 10);
+        await selectUdharContact(id);
+      });
+    });
+  }
+
+  if (udharContactSearch) {
+    udharContactSearch.addEventListener('input', debounce(renderContactsList, 200));
+  }
+
+  function showUdharEmptyState() {
+    if (udharContactEmptyState) udharContactEmptyState.classList.remove('hidden');
+    if (udharContactActiveView) udharContactActiveView.classList.add('hidden');
+  }
+
+  async function selectUdharContact(contactId) {
+    activeUdharContactId = contactId;
+    renderContactsList();
+
+    try {
+      const res = await fetch(`/api/contacts/${contactId}/debts`);
+      const data = await res.json();
+      if (!res.ok) return;
+
+      const contact = data.contact;
+      const debts = data.debts || [];
+      const net = data.net_balance || 0;
+
+      if (udharContactEmptyState) udharContactEmptyState.classList.add('hidden');
+      if (udharContactActiveView) udharContactActiveView.classList.remove('hidden');
+
+      if (udharActiveName) udharActiveName.textContent = contact.name;
+      if (udharActiveDetails) udharActiveDetails.textContent = [contact.phone, contact.email].filter(Boolean).join(' • ') || 'No contact details';
+
+      if (udharActiveNet) {
+        if (net > 0) {
+          udharActiveNet.textContent = `You Will Get ₹${net.toFixed(2)}`;
+          udharActiveNet.style.color = 'var(--accent-success)';
+        } else if (net < 0) {
+          udharActiveNet.textContent = `You Will Give ₹${Math.abs(net).toFixed(2)}`;
+          udharActiveNet.style.color = 'var(--accent-danger)';
+        } else {
+          udharActiveNet.textContent = `Settled (₹0.00)`;
+          udharActiveNet.style.color = 'var(--accent-primary)';
+        }
+      }
+
+      renderDebtsTable(debts);
+    } catch (err) {
+      console.error('Failed to fetch contact debts', err);
+    }
+  }
+
+  function renderDebtsTable(debts) {
+    if (!udharDebtsTableBody) return;
+    if (!debts || debts.length === 0) {
+      udharDebtsTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-secondary);">No ledger entries recorded for this contact yet.</td></tr>`;
+      return;
+    }
+
+    udharDebtsTableBody.innerHTML = debts.map(d => {
+      const isGave = d.type === 'GAVE';
+      const isSettled = d.status === 'SETTLED';
+
+      return `
+        <tr style="${isSettled ? 'opacity: 0.6;' : ''}">
+          <td><strong>${formatDisplayDate(d.date)}</strong></td>
+          <td><span class="${isGave ? 'badge-gave' : 'badge-got'}">${isGave ? 'GAVE (Lent)' : 'GOT (Received)'}</span></td>
+          <td style="font-weight: 700; color: ${isGave ? 'var(--accent-danger)' : 'var(--accent-success)'};">₹${Number(d.amount).toFixed(2)}</td>
+          <td>${escapeHtml(d.note || '-')}${d.tx_recipient ? `<br><span style="font-size: 0.72rem; color: var(--accent-primary);">🔗 ${escapeHtml(d.tx_recipient)}</span>` : ''}</td>
+          <td><span class="${isSettled ? 'badge-settled' : 'badge-pending'}">${d.status}</span></td>
+          <td style="text-align: center; white-space: nowrap;">
+            <button class="btn-toggle-settle btn btn-secondary" data-id="${d.id}" data-status="${d.status}" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; margin-right: 0.3rem;">
+              ${isSettled ? 'Mark Pending' : '✓ Settle'}
+            </button>
+            <button class="btn-delete-debt" data-id="${d.id}" title="Delete debt entry" style="background: none; border: none; color: var(--accent-danger); cursor: pointer; padding: 0.2rem;">✕</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    udharDebtsTableBody.querySelectorAll('.btn-toggle-settle').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const debtId = parseInt(btn.getAttribute('data-id'), 10);
+        const currentStatus = btn.getAttribute('data-status');
+        const nextStatus = currentStatus === 'SETTLED' ? 'PENDING' : 'SETTLED';
+
+        const fd = new FormData();
+        fd.append('status_flag', nextStatus);
+
+        try {
+          const res = await fetch(`/api/debts/${debtId}/settle`, { method: 'PUT', body: fd });
+          if (res.ok) {
+            await loadUdharModule();
+          }
+        } catch (e) {
+          alert('Error updating debt status.');
+        }
+      });
+    });
+
+    udharDebtsTableBody.querySelectorAll('.btn-delete-debt').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const debtId = parseInt(btn.getAttribute('data-id'), 10);
+        if (confirm('Delete this ledger entry?')) {
+          try {
+            const res = await fetch(`/api/debts/${debtId}`, { method: 'DELETE' });
+            if (res.ok) {
+              await loadUdharModule();
+            }
+          } catch (e) {
+            alert('Error deleting debt entry.');
+          }
+        }
+      });
+    });
+  }
+
+  // Add Contact Handlers
+  if (btnOpenAddContact) {
+    btnOpenAddContact.addEventListener('click', () => {
+      if (udharContactModal) udharContactModal.classList.remove('hidden');
+    });
+  }
+
+  if (btnCloseUdharContactModal) {
+    btnCloseUdharContactModal.addEventListener('click', () => {
+      if (udharContactModal) udharContactModal.classList.add('hidden');
+    });
+  }
+
+  if (formUdharContact) {
+    formUdharContact.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('contact-modal-name').value;
+      const phone = document.getElementById('contact-modal-phone').value;
+      const email = document.getElementById('contact-modal-email').value;
+
+      const fd = new FormData();
+      fd.append('name', name);
+      fd.append('phone', phone);
+      fd.append('email', email);
+
+      try {
+        const res = await fetch('/api/contacts', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (res.ok) {
+          if (udharContactModal) udharContactModal.classList.add('hidden');
+          formUdharContact.reset();
+          activeUdharContactId = data.id;
+          await loadUdharModule();
+        } else {
+          alert(data.detail || 'Failed to create contact.');
+        }
+      } catch (err) {
+        alert('Server error creating contact.');
+      }
+    });
+  }
+
+  // Delete Contact Handler
+  if (btnDeleteActiveContact) {
+    btnDeleteActiveContact.addEventListener('click', async () => {
+      if (!activeUdharContactId) return;
+      if (confirm('Are you sure you want to delete this contact and all their ledger history?')) {
+        try {
+          const res = await fetch(`/api/contacts/${activeUdharContactId}`, { method: 'DELETE' });
+          if (res.ok) {
+            activeUdharContactId = null;
+            await loadUdharModule();
+          }
+        } catch (e) {
+          alert('Error deleting contact.');
+        }
+      }
+    });
+  }
+
+  // Add Debt Entry Modal Handlers
+  function openUdharEntryModal(type) {
+    if (!activeUdharContactId) return;
+    const titleEl = document.getElementById('udhar-entry-modal-title');
+    const typeInput = document.getElementById('udhar-entry-type');
+    const dateInput = document.getElementById('udhar-entry-date');
+
+    if (typeInput) typeInput.value = type;
+    if (titleEl) titleEl.textContent = type === 'GAVE' ? '🔻 You Gave Money (Lent)' : '🔺 You Got Money (Received)';
+    if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+
+    document.getElementById('udhar-entry-amount').value = '';
+    document.getElementById('udhar-entry-note').value = '';
+
+    if (udharEntryModal) udharEntryModal.classList.remove('hidden');
+  }
+
+  if (btnUdharAddGave) btnUdharAddGave.addEventListener('click', () => openUdharEntryModal('GAVE'));
+  if (btnUdharAddGot) btnUdharAddGot.addEventListener('click', () => openUdharEntryModal('GOT'));
+
+  if (btnCloseUdharEntryModal) {
+    btnCloseUdharEntryModal.addEventListener('click', () => {
+      if (udharEntryModal) udharEntryModal.classList.add('hidden');
+    });
+  }
+
+  if (formUdharEntry) {
+    formUdharEntry.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!activeUdharContactId) return;
+
+      const type = document.getElementById('udhar-entry-type').value;
+      const amount = parseFloat(document.getElementById('udhar-entry-amount').value) || 0;
+      const date = document.getElementById('udhar-entry-date').value;
+      const dueDate = document.getElementById('udhar-entry-due').value;
+      const note = document.getElementById('udhar-entry-note').value;
+
+      const fd = new FormData();
+      fd.append('contact_id', activeUdharContactId);
+      fd.append('debt_type', type);
+      fd.append('amount', amount);
+      fd.append('date', date);
+      fd.append('due_date', dueDate);
+      fd.append('note', note);
+
+      try {
+        const res = await fetch('/api/debts', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (res.ok) {
+          if (udharEntryModal) udharEntryModal.classList.add('hidden');
+          formUdharEntry.reset();
+          await loadUdharModule();
+        } else {
+          alert(data.detail || 'Failed to save debt entry.');
+        }
+      } catch (err) {
+        alert('Server error saving debt entry.');
+      }
+    });
+  }
+
+  // Statement Reconciliation Handlers
+  window.openReconcileModal = async function(txId, txDesc) {
+    document.getElementById('reconcile-tx-id').value = txId;
+    document.getElementById('reconcile-tx-preview').textContent = txDesc;
+
+    // Load contacts into dropdown
+    const select = document.getElementById('reconcile-contact-select');
+    if (select) {
+      try {
+        const res = await fetch('/api/contacts');
+        const data = await res.json();
+        select.innerHTML = '<option value="">-- Choose Contact --</option>';
+        (data.contacts || []).forEach(c => {
+          select.innerHTML += `<option value="${c.id}">${escapeHtml(c.name)}</option>`;
+        });
+      } catch (e) {}
+    }
+
+    if (udharReconcileModal) udharReconcileModal.classList.remove('hidden');
+  };
+
+  if (btnCloseReconcileModal) {
+    btnCloseReconcileModal.addEventListener('click', () => {
+      if (udharReconcileModal) udharReconcileModal.classList.add('hidden');
+    });
+  }
+
+  if (formUdharReconcile) {
+    formUdharReconcile.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const txId = document.getElementById('reconcile-tx-id').value;
+      const contactId = document.getElementById('reconcile-contact-select').value;
+      const debtType = document.getElementById('reconcile-debt-type').value;
+
+      if (!contactId) {
+        alert('Please select a contact first.');
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('transaction_id', txId);
+      fd.append('contact_id', contactId);
+      fd.append('debt_type', debtType);
+
+      try {
+        const res = await fetch('/api/debts/reconcile', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (res.ok) {
+          if (udharReconcileModal) udharReconcileModal.classList.add('hidden');
+          alert('Transaction successfully linked to contact Udhar ledger!');
+          activeUdharContactId = parseInt(contactId, 10);
+          switchTab(tabBtnUdhar, tabContentUdhar, false);
+          await loadUdharModule();
+        } else {
+          alert(data.detail || 'Failed to reconcile transaction.');
+        }
+      } catch (err) {
+        alert('Server error reconciling transaction.');
+      }
+    });
+  }
+
+
+  // ==========================================================================
+  // GROUP SPLITS & SPLITWISE MODULE LOGIC
+  // ==========================================================================
+
+  let userGroups = [];
+  let activeGroupId = null;
+  let activeGroupData = null;
+
+  const groupsListContainer = document.getElementById('groups-list-container');
+  const groupEmptyState = document.getElementById('group-empty-state');
+  const groupActiveView = document.getElementById('group-active-view');
+
+  const groupActiveName = document.getElementById('group-active-name');
+  const groupActiveCurrencyBadge = document.getElementById('group-active-currency-badge');
+  const groupActiveDesc = document.getElementById('group-active-desc');
+  const groupActiveTotalSpend = document.getElementById('group-active-total-spend');
+  const groupActiveMembersRow = document.getElementById('group-active-members-row');
+  const groupExpensesList = document.getElementById('group-expenses-list');
+  const groupSettlementContainer = document.getElementById('group-settlement-instructions-container');
+
+  const btnOpenCreateGroup = document.getElementById('btn-open-create-group');
+  const btnDeleteActiveGroup = document.getElementById('btn-delete-active-group');
+  const btnOpenAddGroupExpense = document.getElementById('btn-open-add-group-expense');
+
+  // Modals
+  const groupCreateModal = document.getElementById('group-create-modal');
+  const btnCloseGroupCreateModal = document.getElementById('btn-close-group-create-modal');
+  const formGroupCreate = document.getElementById('form-group-create');
+
+  const groupExpenseModal = document.getElementById('group-expense-modal');
+  const btnCloseGroupExpenseModal = document.getElementById('btn-close-group-expense-modal');
+  const formGroupExpense = document.getElementById('form-group-expense');
+  const btnSplitEqually = document.getElementById('btn-split-equally');
+  const gexpenseSplitsContainer = document.getElementById('gexpense-splits-inputs-container');
+
+  async function loadGroupsModule() {
+    try {
+      const res = await fetch('/api/groups');
+      const data = await res.json();
+      if (!res.ok) return;
+
+      userGroups = data.groups || [];
+      renderGroupsList();
+
+      if (activeGroupId) {
+        const exists = userGroups.some(g => g.id === activeGroupId);
+        if (exists) {
+          await selectGroup(activeGroupId);
+        } else {
+          activeGroupId = null;
+          showGroupEmptyState();
+        }
+      } else {
+        showGroupEmptyState();
+      }
+    } catch (err) {
+      console.error('Failed to load groups module', err);
+    }
+  }
+
+  function renderGroupsList() {
+    if (!groupsListContainer) return;
+    if (userGroups.length === 0) {
+      groupsListContainer.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.82rem; text-align: center; padding: 1.5rem 0;">No groups created yet. Click "+ Create Group" to start!</div>`;
+      return;
+    }
+
+    groupsListContainer.innerHTML = userGroups.map(g => {
+      const isActive = g.id === activeGroupId;
+      return `
+        <div class="group-card-item ${isActive ? 'active' : ''}" data-id="${g.id}">
+          <div>
+            <div style="font-size: 0.88rem; font-weight: 600; color: var(--text-primary);">${escapeHtml(g.name)}</div>
+            <div style="font-size: 0.72rem; color: var(--text-secondary);">${g.member_count} member(s) • ${escapeHtml(g.currency || 'INR')}</div>
+          </div>
+          <div style="font-size: 0.85rem; font-weight: 700; color: var(--accent-warning);">
+            ₹${Number(g.total_expenses || 0).toFixed(2)}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    groupsListContainer.querySelectorAll('.group-card-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const id = parseInt(item.getAttribute('data-id'), 10);
+        await selectGroup(id);
+      });
+    });
+  }
+
+  function showGroupEmptyState() {
+    if (groupEmptyState) groupEmptyState.classList.remove('hidden');
+    if (groupActiveView) groupActiveView.classList.add('hidden');
+  }
+
+  async function selectGroup(groupId) {
+    activeGroupId = groupId;
+    renderGroupsList();
+
+    try {
+      const res = await fetch(`/api/groups/${groupId}`);
+      const data = await res.json();
+      if (!res.ok) return;
+
+      activeGroupData = data;
+      const group = data.group;
+      const members = data.members || [];
+      const expenses = data.expenses || [];
+      const settlements = data.settlements || [];
+
+      if (groupEmptyState) groupEmptyState.classList.add('hidden');
+      if (groupActiveView) groupActiveView.classList.remove('hidden');
+
+      if (groupActiveName) groupActiveName.textContent = group.name;
+      if (groupActiveCurrencyBadge) groupActiveCurrencyBadge.textContent = group.currency || 'INR';
+      if (groupActiveDesc) groupActiveDesc.textContent = group.description || 'Shared trip expenses';
+      if (groupActiveTotalSpend) groupActiveTotalSpend.textContent = `₹${(data.total_spend || 0).toFixed(2)}`;
+
+      // Render members badges
+      if (groupActiveMembersRow) {
+        groupActiveMembersRow.innerHTML = members.map(m => {
+          const net = m.net_balance || 0;
+          let badgeClass = 'badge-settled';
+          let text = `${escapeHtml(m.name)}: Settled`;
+          if (net > 0) {
+            badgeClass = 'badge-got';
+            text = `${escapeHtml(m.name)}: +₹${net.toFixed(2)}`;
+          } else if (net < 0) {
+            badgeClass = 'badge-gave';
+            text = `${escapeHtml(m.name)}: -₹${Math.abs(net).toFixed(2)}`;
+          }
+          return `<span class="${badgeClass}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">${text}</span>`;
+        }).join('');
+      }
+
+      // Render expenses feed
+      renderGroupExpensesFeed(expenses);
+
+      // Render minimal debt settlement graph
+      renderSettlementInstructions(settlements);
+
+    } catch (err) {
+      console.error('Failed to fetch group details', err);
+    }
+  }
+
+  function renderGroupExpensesFeed(expenses) {
+    if (!groupExpensesList) return;
+    if (!expenses || expenses.length === 0) {
+      groupExpensesList.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.82rem; text-align: center; padding: 1.5rem 0;">No shared expenses logged in this group yet.</div>`;
+      return;
+    }
+
+    groupExpensesList.innerHTML = expenses.map(exp => {
+      const splitsSummary = (exp.splits || []).map(s => `${escapeHtml(s.member_name)}: ₹${Number(s.split_amount).toFixed(2)}`).join(' • ');
+
+      return `
+        <div class="group-expense-card">
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <strong style="font-size: 0.92rem; color: var(--text-primary);">${escapeHtml(exp.title)}</strong>
+              <span class="user-badge" style="font-size: 0.68rem; padding: 0.1rem 0.4rem;">${escapeHtml(exp.category || 'Others')}</span>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem;">
+              Paid by <strong>${escapeHtml(exp.paid_by_name)}</strong> on ${formatDisplayDate(exp.date)}
+            </div>
+            <div style="font-size: 0.72rem; color: var(--accent-primary); margin-top: 0.25rem;">
+              Splits: ${splitsSummary || 'Equal'}
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent-warning);">
+              ₹${Number(exp.amount).toFixed(2)}
+            </div>
+            <button class="btn-delete-group-expense" data-id="${exp.id}" title="Delete expense" style="background: none; border: none; color: var(--accent-danger); cursor: pointer; padding: 0.2rem;">✕</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    groupExpensesList.querySelectorAll('.btn-delete-group-expense').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = parseInt(btn.getAttribute('data-id'), 10);
+        if (confirm('Delete this shared group expense?')) {
+          try {
+            const res = await fetch(`/api/group-expenses/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+              await selectGroup(activeGroupId);
+            }
+          } catch (e) {
+            alert('Error deleting group expense.');
+          }
+        }
+      });
+    });
+  }
+
+  function renderSettlementInstructions(settlements) {
+    if (!groupSettlementContainer) return;
+    if (!settlements || settlements.length === 0) {
+      groupSettlementContainer.innerHTML = `<div style="font-size: 0.82rem; color: var(--accent-success); font-weight: 600;">🎉 All balances in this group are settled up!</div>`;
+      return;
+    }
+
+    groupSettlementContainer.innerHTML = settlements.map(s => `
+      <div class="settlement-instruction-item">
+        <span><strong>${escapeHtml(s.from_name)}</strong> pays <strong>${escapeHtml(s.to_name)}</strong></span>
+        <strong style="color: var(--accent-success); font-size: 0.9rem;">₹${Number(s.amount).toFixed(2)}</strong>
+      </div>
+    `).join('');
+  }
+
+  // Create Group Handlers
+  if (btnOpenCreateGroup) {
+    btnOpenCreateGroup.addEventListener('click', () => {
+      if (groupCreateModal) groupCreateModal.classList.remove('hidden');
+    });
+  }
+
+  if (btnCloseGroupCreateModal) {
+    btnCloseGroupCreateModal.addEventListener('click', () => {
+      if (groupCreateModal) groupCreateModal.classList.add('hidden');
+    });
+  }
+
+  if (formGroupCreate) {
+    formGroupCreate.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('group-modal-name').value;
+      const currency = document.getElementById('group-modal-currency').value;
+      const desc = document.getElementById('group-modal-desc').value;
+      const members = document.getElementById('group-modal-members').value;
+
+      const fd = new FormData();
+      fd.append('name', name);
+      fd.append('currency', currency);
+      fd.append('description', desc);
+      fd.append('member_names', members);
+
+      try {
+        const res = await fetch('/api/groups', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (res.ok) {
+          if (groupCreateModal) groupCreateModal.classList.add('hidden');
+          formGroupCreate.reset();
+          activeGroupId = data.group_id;
+          await loadGroupsModule();
+        } else {
+          alert(data.detail || 'Failed to create group.');
+        }
+      } catch (err) {
+        alert('Server error creating group.');
+      }
+    });
+  }
+
+  // Delete Active Group Handler
+  if (btnDeleteActiveGroup) {
+    btnDeleteActiveGroup.addEventListener('click', async () => {
+      if (!activeGroupId) return;
+      if (confirm('Delete this group and all its logged shared expenses?')) {
+        try {
+          const res = await fetch(`/api/groups/${activeGroupId}`, { method: 'DELETE' });
+          if (res.ok) {
+            activeGroupId = null;
+            await loadGroupsModule();
+          }
+        } catch (e) {
+          alert('Error deleting group.');
+        }
+      }
+    });
+  }
+
+  // Add Shared Expense Handlers
+  if (btnOpenAddGroupExpense) {
+    btnOpenAddGroupExpense.addEventListener('click', () => {
+      if (!activeGroupData || !activeGroupData.members) return;
+
+      const members = activeGroupData.members;
+      const paidBySelect = document.getElementById('gexpense-modal-paidby');
+      const dateInput = document.getElementById('gexpense-modal-date');
+
+      if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+      document.getElementById('gexpense-modal-title').value = '';
+      document.getElementById('gexpense-modal-amount').value = '';
+
+      if (paidBySelect) {
+        paidBySelect.innerHTML = '<option value="">-- Select Member --</option>';
+        members.forEach(m => {
+          paidBySelect.innerHTML += `<option value="${m.id}">${escapeHtml(m.name)}</option>`;
+        });
+      }
+
+      // Populate member split inputs
+      renderSplitInputs(members);
+
+      if (groupExpenseModal) groupExpenseModal.classList.remove('hidden');
+    });
+  }
+
+  function renderSplitInputs(members) {
+    if (!gexpenseSplitsContainer) return;
+    gexpenseSplitsContainer.innerHTML = members.map(m => `
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.8rem;">
+        <span>${escapeHtml(m.name)}</span>
+        <input type="number" step="0.01" class="form-input gexpense-member-split" data-member-id="${m.id}" placeholder="₹0.00" style="width: 110px; padding: 0.25rem 0.5rem; font-size: 0.78rem;" />
+      </div>
+    `).join('');
+  }
+
+  if (btnSplitEqually) {
+    btnSplitEqually.addEventListener('click', () => {
+      const total = parseFloat(document.getElementById('gexpense-modal-amount').value) || 0;
+      const inputs = document.querySelectorAll('.gexpense-member-split');
+      if (inputs.length === 0 || total <= 0) return;
+
+      const share = roundToTwoDecimals(total / inputs.length);
+      inputs.forEach(inp => inp.value = share.toFixed(2));
+    });
+  }
+
+  function roundToTwoDecimals(num) {
+    return Math.round((num + Number.EPSILON) * 100) / 100;
+  }
+
+  if (btnCloseGroupExpenseModal) {
+    btnCloseGroupExpenseModal.addEventListener('click', () => {
+      if (groupExpenseModal) groupExpenseModal.classList.add('hidden');
+    });
+  }
+
+  if (formGroupExpense) {
+    formGroupExpense.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!activeGroupId) return;
+
+      const title = document.getElementById('gexpense-modal-title').value;
+      const amount = parseFloat(document.getElementById('gexpense-modal-amount').value) || 0;
+      const paidByMemberId = parseInt(document.getElementById('gexpense-modal-paidby').value, 10);
+      const date = document.getElementById('gexpense-modal-date').value;
+      const category = document.getElementById('gexpense-modal-category').value;
+
+      if (!paidByMemberId) {
+        alert('Please select who paid for this expense.');
+        return;
+      }
+
+      // Collect splits map
+      const splits = {};
+      let totalSplitSum = 0;
+      document.querySelectorAll('.gexpense-member-split').forEach(inp => {
+        const mId = inp.getAttribute('data-member-id');
+        const sAmt = parseFloat(inp.value) || 0;
+        splits[mId] = sAmt;
+        totalSplitSum += sAmt;
+      });
+
+      // If splits left empty, auto-split equally
+      if (totalSplitSum <= 0 && activeGroupData && activeGroupData.members) {
+        const count = activeGroupData.members.length;
+        const equalShare = roundToTwoDecimals(amount / count);
+        activeGroupData.members.forEach(m => {
+          splits[m.id] = equalShare;
+        });
+      }
+
+      const fd = new FormData();
+      fd.append('title', title);
+      fd.append('amount', amount);
+      fd.append('paid_by_member_id', paidByMemberId);
+      fd.append('date', date);
+      fd.append('category', category);
+      fd.append('splits_json', JSON.stringify(splits));
+
+      try {
+        const res = await fetch(`/api/groups/${activeGroupId}/expenses`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (res.ok) {
+          if (groupExpenseModal) groupExpenseModal.classList.add('hidden');
+          formGroupExpense.reset();
+          await selectGroup(activeGroupId);
+        } else {
+          alert(data.detail || 'Failed to save group expense.');
+        }
+      } catch (err) {
+        alert('Server error saving group expense.');
+      }
+    });
   }
 });
