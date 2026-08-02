@@ -7,6 +7,7 @@ import random
 import secrets
 import smtplib
 import socket
+import sqlite3
 import ssl
 import urllib.error
 import urllib.request
