@@ -24,3 +24,6 @@ __pycache__/
 .vscode/
 .idea/
 *.log
+
+# Project Instructions
+instructions.md

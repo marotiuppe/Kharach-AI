@@ -1,3 +1,62 @@
+  // Date & Month Formatting Helpers (Omit year for current FY, show month names)
+  const MONTH_NAMES_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const MONTH_NAMES_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function formatDisplayDate(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return dateStr || '-';
+    const parts = dateStr.trim().split('-');
+    if (parts.length !== 3) return dateStr;
+
+    const year = parseInt(parts[0], 10);
+    const monthIdx = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+
+    if (isNaN(year) || isNaN(monthIdx) || isNaN(day) || monthIdx < 0 || monthIdx > 11) {
+      return dateStr;
+    }
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+    const fyEndYear = fyStartYear + 1;
+
+    const isCurrentFY = (year === fyStartYear && monthIdx >= 3) || (year === fyEndYear && monthIdx < 3) || year === currentYear;
+    const monthShort = MONTH_NAMES_SHORT[monthIdx];
+
+    if (isCurrentFY) {
+      return `${day} ${monthShort}`;
+    }
+    return `${day} ${monthShort} ${year}`;
+  }
+
+  function formatDisplayMonth(monthStr) {
+    if (!monthStr || typeof monthStr !== 'string') return monthStr || '';
+    const parts = monthStr.trim().split('-');
+    if (parts.length < 2) return monthStr;
+
+    const year = parseInt(parts[0], 10);
+    const monthIdx = parseInt(parts[1], 10) - 1;
+
+    if (isNaN(year) || isNaN(monthIdx) || monthIdx < 0 || monthIdx > 11) {
+      return monthStr;
+    }
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+    const fyEndYear = fyStartYear + 1;
+
+    const isCurrentFY = (year === fyStartYear && monthIdx >= 3) || (year === fyEndYear && monthIdx < 3) || year === currentYear;
+    const fullMonth = MONTH_NAMES_FULL[monthIdx];
+
+    if (isCurrentFY) {
+      return fullMonth;
+    }
+    return `${fullMonth} '${String(year).slice(2)}`;
+  }
+
 document.addEventListener('DOMContentLoaded', () => {
   // DOM Element References
   const landingScreen = document.getElementById('landing-screen');
@@ -156,6 +215,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentSortField = 'date';
   let currentSortOrder = 'desc';
   let selectedTxIds = new Set();
+  let currentPage = 1;
+  const PAGE_SIZE = 15;
+  let totalFilteredTransactions = [];
 
   // Bulk Action UI Elements
   const bulkActionsBar = document.getElementById('bulk-actions-bar');
@@ -350,35 +412,49 @@ document.addEventListener('DOMContentLoaded', () => {
     updateFilePreview();
   }
 
-  // Drag & Drop Handlers on AI Chat Card & Window
-  ['dragenter', 'dragover'].forEach(eventName => {
-    window.addEventListener(eventName, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (aiChatCard) {
-        aiChatCard.classList.add('dragover');
-      }
-    }, false);
-  });
+  // Drag & Drop Handlers — Full-Screen Overlay
+  const dropOverlay = document.getElementById('drop-overlay');
+  let dragCounter = 0;
 
-  ['dragleave', 'drop'].forEach(eventName => {
-    window.addEventListener(eventName, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (aiChatCard) {
-        aiChatCard.classList.remove('dragover');
-      }
-    }, false);
-  });
+  window.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    if (dropOverlay) dropOverlay.classList.remove('hidden');
+    if (aiChatCard) aiChatCard.classList.add('dragover');
+  }, false);
+
+  window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+  }, false);
+
+  window.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      if (dropOverlay) dropOverlay.classList.add('hidden');
+      if (aiChatCard) aiChatCard.classList.remove('dragover');
+    }
+  }, false);
 
   window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    if (dropOverlay) dropOverlay.classList.add('hidden');
+    if (aiChatCard) aiChatCard.classList.remove('dragover');
+
     const files = Array.from(e.dataTransfer.files).filter(f =>
       f.type.includes('pdf') || f.type.includes('image') || f.name.match(/\.(pdf|png|jpg|jpeg)$/i)
     );
     if (files.length > 0) {
       addFilesToStaging(files);
+      // Auto-open chat panel when files are dropped
+      const chatEl = document.querySelector('.dashboard-chat-right');
+      if (chatEl && chatEl.classList.contains('chat-collapsed')) {
+        chatEl.classList.remove('chat-collapsed');
+      }
     }
-  });
+  }, false);
 
   // Clipboard Ctrl+V Paste Image Handler
   window.addEventListener('paste', (e) => {
@@ -491,16 +567,45 @@ document.addEventListener('DOMContentLoaded', () => {
     filterSearch.addEventListener('input', debounce(() => fetchFilteredTransactions(), 300));
   }
 
-  // Reset Filters Action
-  btnResetFilters.addEventListener('click', () => {
-    filterType.value = 'ALL';
-    filterCategory.value = 'ALL';
+  // Reset All Filters Helper
+  function resetAllFilters(triggerFetch = true) {
+    if (filterType) filterType.value = 'ALL';
+    if (filterCategory) filterCategory.value = 'ALL';
     if (filterAccount) filterAccount.value = 'ALL';
-    filterSearch.value = '';
+    if (filterSearch) filterSearch.value = '';
     currentSortField = 'date';
     currentSortOrder = 'desc';
-    fetchFilteredTransactions();
-    fetchMetrics();
+    if (triggerFetch) {
+      fetchFilteredTransactions();
+      fetchMetrics();
+    }
+  }
+
+  // Reset Filters Action Button
+  btnResetFilters.addEventListener('click', () => {
+    resetAllFilters(true);
+  });
+
+  // Interactive KPI Cards Filtering
+  [
+    { el: kpiCredited, type: 'CREDIT', title: 'Click to view all CREDIT transactions' },
+    { el: kpiDebited, type: 'DEBIT', title: 'Click to view all DEBIT transactions' },
+    { el: kpiBalance, type: 'ALL', title: 'Click to view all transactions' },
+    { el: kpiCount, type: 'ALL', title: 'Click to view all transactions' }
+  ].forEach(item => {
+    if (item.el) {
+      const card = item.el.closest('.kpi-card');
+      if (card) {
+        card.style.cursor = 'pointer';
+        card.title = item.title;
+        card.addEventListener('click', () => {
+          resetAllFilters(false);
+          filterType.value = item.type;
+          switchTab(tabBtnLedger, tabContentLedger, false);
+          fetchFilteredTransactions();
+        });
+      }
+    }
   });
 
   // CSV Export Action
@@ -680,6 +785,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dashboardScreen) dashboardScreen.classList.add('hidden');
     if (navPublicSection) navPublicSection.classList.remove('hidden');
     if (navUserSection) navUserSection.classList.add('hidden');
+    const btnFloatingAi = document.getElementById('btn-floating-ai');
+    if (btnFloatingAi) btnFloatingAi.classList.add('hidden');
   }
 
   async function fetchAppConfig() {
@@ -735,6 +842,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (navUserSection) navUserSection.classList.remove('hidden');
     userDisplayName.textContent = `👤 ${name}${isAdmin ? ' (Admin)' : ''}`;
 
+    const btnFloatingAi = document.getElementById('btn-floating-ai');
+    if (btnFloatingAi) btnFloatingAi.classList.remove('hidden');
+
+    if (dashboardChatRight) dashboardChatRight.classList.add('chat-collapsed');
+    if (chatResizerGutter) chatResizerGutter.style.display = 'none';
+
     if (isAdmin) {
       btnOpenSettings.classList.remove('hidden');
       btnTestModels.classList.remove('hidden');
@@ -744,7 +857,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     loadDashboardData();
+    restoreChatSession();
   }
+
+  // Floating AI FAB & Chat Drawer Toggle Handlers
+  const btnFloatingAi = document.getElementById('btn-floating-ai');
+  const btnToggleChat = document.getElementById('btn-toggle-chat');
+  const dashboardChatRight = document.querySelector('.dashboard-chat-right');
+  const chatResizerGutter = document.getElementById('chat-resizer');
+
+  function toggleChatDrawer() {
+    if (!dashboardChatRight) return;
+    const isCollapsed = dashboardChatRight.classList.toggle('chat-collapsed');
+    if (chatResizerGutter) {
+      if (isCollapsed) {
+        chatResizerGutter.style.display = 'none';
+      } else {
+        chatResizerGutter.style.display = '';
+      }
+    }
+  }
+
+  if (btnFloatingAi) btnFloatingAi.addEventListener('click', toggleChatDrawer);
+  if (btnToggleChat) btnToggleChat.addEventListener('click', toggleChatDrawer);
 
   // Landing Page & Navigation Listeners
   if (navBrand) {
@@ -1018,6 +1153,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnSendChat.addEventListener('click', () => sendChatMessage());
 
+  // Chat Session Storage helpers
+  const CHAT_SESSION_KEY = 'kharach_chat_session';
+
+  function saveChatSession() {
+    const messages = [];
+    chatMessagesContainer.querySelectorAll('.chat-message').forEach(msg => {
+      const role = msg.classList.contains('user') ? 'user' : 'assistant';
+      const bubble = msg.querySelector('.message-bubble');
+      messages.push({ role, html: bubble ? bubble.innerHTML : '' });
+    });
+    try { sessionStorage.setItem(CHAT_SESSION_KEY, JSON.stringify(messages)); } catch(_) {}
+  }
+
+  function restoreChatSession() {
+    try {
+      const raw = sessionStorage.getItem(CHAT_SESSION_KEY);
+      if (!raw) return;
+      const messages = JSON.parse(raw);
+      if (!messages || messages.length === 0) return;
+      chatMessagesContainer.innerHTML = '';
+      messages.forEach(({ role, html }) => {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `chat-message ${role}`;
+        const avatarDiv = document.createElement('div');
+        avatarDiv.className = 'message-avatar';
+        avatarDiv.textContent = role === 'user' ? '👤' : '✨';
+        const bubbleDiv = document.createElement('div');
+        bubbleDiv.className = 'message-bubble';
+        bubbleDiv.innerHTML = html;
+        msgDiv.appendChild(avatarDiv);
+        msgDiv.appendChild(bubbleDiv);
+        chatMessagesContainer.appendChild(msgDiv);
+      });
+      chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    } catch(_) {}
+  }
+
   function appendChatMessage(role, content, attachmentLabels = []) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `chat-message ${role}`;
@@ -1172,6 +1344,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     }
+
+    saveChatSession();
   }
 
   function formatMarkdown(text) {
@@ -1321,11 +1495,14 @@ document.addEventListener('DOMContentLoaded', () => {
   tabBtnBudget.addEventListener('click', () => switchTab(tabBtnBudget, tabContentBudget));
   tabBtnLarge.addEventListener('click', () => switchTab(tabBtnLarge, tabContentLarge));
 
-  function switchTab(btn, content) {
+  function switchTab(btn, content, clearFiltersOnSwitch = true) {
     allTabBtns.forEach(b => b && b.classList.remove('active'));
     allTabContents.forEach(c => c && c.classList.remove('active'));
     if (btn) btn.classList.add('active');
     if (content) content.classList.add('active');
+    if (clearFiltersOnSwitch) {
+      resetAllFilters(true);
+    }
   }
 
   // Filters Trigger
@@ -1471,7 +1648,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const res = await fetch(`/api/transactions?${params.toString()}`);
-      currentTransactions = await res.json();
+      totalFilteredTransactions = await res.json();
+      currentTransactions = totalFilteredTransactions;
+      currentPage = 1;
       renderSortedLedger();
     } catch (err) {
       console.error('Failed to fetch transactions', err);
@@ -1479,7 +1658,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderSortedLedger() {
-    let sorted = [...currentTransactions];
+    let sorted = [...totalFilteredTransactions];
     if (currentSortField) {
       sorted.sort((a, b) => {
         let valA = a[currentSortField] ?? '';
@@ -1499,12 +1678,51 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    renderLedgerTable(sorted);
+    currentTransactions = sorted;
+    const total = sorted.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const paginated = sorted.slice(start, start + PAGE_SIZE);
+    renderLedgerTable(paginated);
+    updatePaginationUI(total, start, paginated.length, currentPage, totalPages);
   }
+
+  function updatePaginationUI(total, start, count, page, totalPages) {
+    const infoEl = document.getElementById('pagination-info');
+    const pageNumEl = document.getElementById('pagination-page-num');
+    const btnPrev = document.getElementById('btn-prev-page');
+    const btnNext = document.getElementById('btn-next-page');
+    const bar = document.getElementById('table-pagination-bar');
+
+    if (!bar) return;
+    bar.style.display = total > 0 ? 'flex' : 'none';
+
+    if (infoEl) infoEl.textContent = `Showing ${total === 0 ? 0 : start + 1}–${start + count} of ${total} entries`;
+    if (pageNumEl) pageNumEl.textContent = `Page ${page} of ${totalPages}`;
+    if (btnPrev) btnPrev.disabled = page <= 1;
+    if (btnNext) btnNext.disabled = page >= totalPages;
+  }
+
+  // Pagination Button Listeners
+  const btnPrevPage = document.getElementById('btn-prev-page');
+  const btnNextPage = document.getElementById('btn-next-page');
+  if (btnPrevPage) btnPrevPage.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderSortedLedger(); } });
+  if (btnNextPage) btnNextPage.addEventListener('click', () => { currentPage++; renderSortedLedger(); });
 
   function renderLedgerTable(transactions) {
     if (!transactions || transactions.length === 0) {
-      ledgerTableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-secondary);">No matching transactions found.</td></tr>`;
+      const isEmpty = !totalFilteredTransactions || totalFilteredTransactions.length === 0;
+      ledgerTableBody.innerHTML = isEmpty ? `
+        <tr><td colspan="10" style="padding: 0;">
+          <div class="empty-state-cta">
+            <div class="empty-icon">🏦</div>
+            <h3>No Transactions Yet</h3>
+            <p>Drop a bank statement PDF or image anywhere on this page, or paste a screenshot (Ctrl+V) to get started with AI analysis.</p>
+            <button class="btn-cta" onclick="document.getElementById('file-input').click()">📂 Import First Statement</button>
+          </div>
+        </td></tr>` : `<tr><td colspan="10" style="text-align: center; color: var(--text-secondary);">No matching transactions found.</td></tr>`;
       updateBulkBar();
       return;
     }
@@ -1512,7 +1730,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ledgerTableBody.innerHTML = transactions.map(t => `
       <tr>
         <td style="text-align: center;"><input type="checkbox" class="tx-row-checkbox" data-id="${t.id}" ${selectedTxIds.has(t.id) ? 'checked' : ''} style="cursor: pointer; width: 15px; height: 15px;" /></td>
-        <td>${t.date || '-'}</td>
+        <td><strong>${formatDisplayDate(t.date)}</strong></td>
         <td><strong>${escapeHtml(t.recipient_or_sender || '-')}</strong></td>
         <td>${escapeHtml(t.particulars_note || '-')}</td>
         <td style="color: var(--accent-danger);">₹${Number(t.debit_amount || 0).toFixed(2)}</td>
@@ -1718,7 +1936,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     largeTableBody.innerHTML = transactions.map(t => `
       <tr>
-        <td>${t.date || '-'}</td>
+        <td><strong>${formatDisplayDate(t.date)}</strong></td>
         <td><strong>${escapeHtml(t.recipient_or_sender || '-')}</strong></td>
         <td>${escapeHtml(t.particulars_note || '-')}</td>
         <td style="color: var(--accent-danger);">₹${Number(t.debit_amount || 0).toFixed(2)}</td>
@@ -1751,8 +1969,9 @@ document.addEventListener('DOMContentLoaded', () => {
           if (elements.length > 0) {
             const idx = elements[0].index;
             const clickedCategory = categoryData[idx].category;
+            resetAllFilters(false);
             filterCategory.value = clickedCategory;
-            switchTab(tabBtnLedger, tabContentLedger);
+            switchTab(tabBtnLedger, tabContentLedger, false);
             fetchFilteredTransactions();
           }
         },
@@ -1769,7 +1988,7 @@ document.addEventListener('DOMContentLoaded', () => {
     trendChartInstance = new Chart(ctxTrend, {
       type: 'line',
       data: {
-        labels: trendData.map(t => t.date),
+        labels: trendData.map(t => formatDisplayDate(t.date)),
         datasets: [{
           label: 'Daily Debit (₹)',
           data: trendData.map(t => t.debit_amount),
@@ -1839,8 +2058,9 @@ document.addEventListener('DOMContentLoaded', () => {
       row.addEventListener('click', () => {
         const item = topRecipients[idx];
         if (item && item.recipient_or_sender) {
+          resetAllFilters(false);
           filterSearch.value = item.recipient_or_sender;
-          switchTab(tabBtnLedger, tabContentLedger);
+          switchTab(tabBtnLedger, tabContentLedger, false);
           fetchFilteredTransactions();
         }
       });
@@ -1858,7 +2078,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cashflowChartInstance = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: monthlyCashflow.map(m => m.month),
+        labels: monthlyCashflow.map(m => formatDisplayMonth(m.month)),
         datasets: [
           {
             label: 'Total Income (Credit) ₹',
@@ -1878,6 +2098,20 @@ document.addEventListener('DOMContentLoaded', () => {
         responsive: true,
         plugins: {
           legend: { labels: { color: '#f0f4f8' } }
+        },
+        onClick: (evt, elements) => {
+          if (elements.length > 0) {
+            const el = elements[0];
+            const monthObj = monthlyCashflow[el.index];
+            if (monthObj) {
+              const isCredit = el.datasetIndex === 0;
+              resetAllFilters(false);
+              filterType.value = isCredit ? 'CREDIT' : 'DEBIT';
+              filterSearch.value = monthObj.month;
+              switchTab(tabBtnLedger, tabContentLedger, false);
+              fetchFilteredTransactions();
+            }
+          }
         },
         scales: {
           x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
@@ -1902,7 +2136,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (burnTotalEl) burnTotalEl.textContent = `₹${totalBurn.toFixed(2)} / month`;
 
     grid.innerHTML = recurringTx.map(item => `
-      <div class="kpi-card" style="padding: 1rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.5rem; cursor: pointer;">
+      <div class="kpi-card recurring-card" style="padding: 1rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.5rem; cursor: pointer;" title="Click to filter ${escapeHtml(item.recipient_or_sender)} transactions">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <div>
             <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.2rem;">${escapeHtml(item.recipient_or_sender)}</h4>
@@ -1922,6 +2156,19 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       </div>
     `).join('');
+
+    grid.querySelectorAll('.recurring-card').forEach((card, idx) => {
+      card.addEventListener('click', () => {
+        const item = recurringTx[idx];
+        if (item && item.recipient_or_sender) {
+          resetAllFilters(false);
+          filterSearch.value = item.recipient_or_sender;
+          filterType.value = 'DEBIT';
+          switchTab(tabBtnLedger, tabContentLedger, false);
+          fetchFilteredTransactions();
+        }
+      });
+    });
   }
 
   async function renderBudgetLimits(categories, categorySpending) {
@@ -1972,7 +2219,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return `
         <div class="kpi-card" style="padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">${escapeHtml(cat)}</h4>
+            <h4 class="budget-cat-title" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); cursor: pointer;" title="Click to filter ${escapeHtml(cat)} transactions">${escapeHtml(cat)}</h4>
             <span style="font-size: 0.72rem; font-weight: 600; color: ${meterColor}; background: rgba(255,255,255,0.05); padding: 0.2rem 0.5rem; border-radius: 12px; border: 1px solid ${meterColor};">${statusText}</span>
           </div>
 
@@ -1992,6 +2239,16 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       `;
     }).join('');
+
+    grid.querySelectorAll('.budget-cat-title').forEach(title => {
+      title.addEventListener('click', () => {
+        const catName = title.textContent.trim();
+        resetAllFilters(false);
+        filterCategory.value = catName;
+        switchTab(tabBtnLedger, tabContentLedger, false);
+        fetchFilteredTransactions();
+      });
+    });
 
 
     grid.querySelectorAll('.form-set-budget').forEach(form => {

@@ -652,42 +652,30 @@ def me(request: Request):
     return {"authenticated": False, "is_admin": False}
 
 
+def get_api_key_pool() -> List[str]:
+    """Return all configured Gemini API keys in order, filtering out empty entries."""
+    keys: List[str] = []
+    # Collect GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3 ...
+    primary = get_setting_from_db("GEMINI_API_KEY", "")
+    if primary:
+        keys.append(primary)
+    idx = 2
+    while True:
+        env_key = f"GEMINI_API_KEY_{idx}"
+        val = os.environ.get(env_key, "").strip()
+        if not val:
+            break
+        keys.append(val)
+        idx += 1
+    return keys
+
+
 def get_working_model(client: genai.Client) -> str:
-    env_model = get_setting_from_db("GEMINI_MODEL", "")
-    if env_model:
-        try:
-            print(f"[MODEL VERIFIER] Testing configured model from settings: {env_model}")
-            res = client.models.generate_content(model=env_model, contents=["ping"])
-            if res and (res.text or hasattr(res, "candidates")):
-                print(f"[MODEL VERIFIER] Confirmed working model: {env_model}")
-                return env_model
-        except Exception as e:
-            print(f"[MODEL VERIFIER WARNING] Model {env_model} failed: {e}")
-
-    candidates = ["gemini-flash-latest", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
-    try:
-        listed = list(client.models.list())
-        for m in listed:
-            name = getattr(m, "name", "").replace("models/", "")
-            if name not in candidates and ("flash" in name or "gemini" in name):
-                candidates.append(name)
-    except Exception as e:
-        print(f"[MODEL DISCOVERY ERROR] {e}")
-
-    for model_name in candidates:
-        try:
-            print(f"[MODEL VERIFIER] Testing model: {model_name}")
-            test_res = client.models.generate_content(model=model_name, contents=["ping"])
-            if test_res and (test_res.text or hasattr(test_res, "candidates")):
-                print(f"[MODEL VERIFIER] Verified working model: {model_name}")
-                return model_name
-        except Exception as test_err:
-            print(f"[MODEL VERIFIER] Model {model_name} failed test: {test_err}")
-
-    raise HTTPException(
-        status_code=500,
-        detail="No verified working Gemini models available for this API key.",
-    )
+    """Return the configured Gemini model name. Actual availability is
+    validated lazily inside the rotation loop in /api/chat, so no
+    pre-flight ping is made here (avoids burning quota on verification)."""
+    env_model = get_setting_from_db("GEMINI_MODEL", "gemini-flash-latest")
+    return env_model.strip() if env_model.strip() else "gemini-flash-latest"
 
 
 @app.get("/api/test-models")
@@ -696,32 +684,26 @@ def test_models(request: Request):
     if not is_admin_user(user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required")
 
-    api_key = get_setting_from_db("GEMINI_API_KEY", "")
-    if not api_key:
+    api_keys = get_api_key_pool()
+    if not api_keys:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY configuration missing.")
 
-    client = genai.Client(api_key=api_key)
-    candidates = ["gemini-flash-latest", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
-    try:
-        listed = list(client.models.list())
-        for m in listed:
-            name = getattr(m, "name", "").replace("models/", "")
-            if name not in candidates and ("flash" in name or "gemini" in name):
-                candidates.append(name)
-    except Exception as e:
-        print(f"[TEST MODELS LIST ERROR] {e}")
+    candidates = ["gemini-flash-latest", "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 
     results = []
-    for m_name in candidates:
-        try:
-            res = client.models.generate_content(model=m_name, contents=["ping"])
-            if res and (res.text or hasattr(res, "candidates")):
-                results.append({"name": m_name, "status": "WORKING"})
-            else:
-                results.append({"name": m_name, "status": "NO RESPONSE"})
-        except Exception as err:
-            err_str = str(err)
-            results.append({"name": m_name, "status": f"FAILED: {err_str[:60]}"})
+    for key_idx, api_key in enumerate(api_keys):
+        client = genai.Client(api_key=api_key)
+        key_label = f"Key#{key_idx + 1}"
+        for m_name in candidates:
+            try:
+                res = client.models.generate_content(model=m_name, contents=["ping"])
+                if res and (res.text or hasattr(res, "candidates")):
+                    results.append({"name": f"{key_label} · {m_name}", "status": "WORKING"})
+                else:
+                    results.append({"name": f"{key_label} · {m_name}", "status": "NO RESPONSE"})
+            except Exception as err:
+                err_str = str(err)
+                results.append({"name": f"{key_label} · {m_name}", "status": f"FAILED: {err_str[:60]}"})
 
     return {"models": results}
 
@@ -943,14 +925,15 @@ async def chat_with_gemini(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    api_key = get_setting_from_db("GEMINI_API_KEY", "")
-    if not api_key:
+    api_keys = get_api_key_pool()
+    if not api_keys:
         raise HTTPException(
             status_code=500,
             detail="Server configuration error: GEMINI_API_KEY missing in Admin Settings.",
         )
 
-    client = genai.Client(api_key=api_key)
+    # Build initial client from first key; will rotate if 429 occurs
+    client = genai.Client(api_key=api_keys[0])
     model_to_use = selected_model if (selected_model and selected_model.strip()) else get_working_model(client)
 
     username = user["username"]
@@ -1025,58 +1008,77 @@ async def chat_with_gemini(
 
     contents.append(f"{system_instruction}\n\nUser Question/Instruction:\n{user_query}")
 
-    try:
-        response = client.models.generate_content(
-            model=model_to_use,
-            contents=contents,
+    response = None
+    model_to_use = "gemini-flash-latest"
+    last_err = None
+    used_key_idx = 0
+
+    # Try each API key in pool — same model, different key on 429
+    for key_idx, api_key in enumerate(api_keys):
+        key_client = genai.Client(api_key=api_key) if key_idx > 0 else client
+        try:
+            response = key_client.models.generate_content(model=model_to_use, contents=contents)
+            used_key_idx = key_idx
+            break
+        except Exception as err:
+            err_str = str(err)
+            is_quota = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
+            print(f"[CHAT FALLBACK] Key#{key_idx + 1} failed ({'RATE LIMIT' if is_quota else 'ERROR'}): {err_str[:120]}")
+            last_err = err
+
+    print(f"[CHAT] Responded using Key#{used_key_idx + 1}, Model: {model_to_use}")
+
+    if not response:
+        key_count = len(api_keys)
+        raise HTTPException(
+            status_code=429,
+            detail=f"All {key_count} API key(s) and model fallbacks are rate-limited (429). Add more keys to .env or retry later."
         )
-        reply_text = response.text or "I parsed your request, but received no text output."
 
-        # Check if response contains transaction JSON block to auto-insert into DB
-        if "```json" in reply_text or "```" in reply_text:
-            try:
-                json_str = reply_text.split("```json")[-1].split("```")[0].strip() if "```json" in reply_text else reply_text.split("```")[-2].strip()
-                parsed_txs = json.loads(json_str)
-                if isinstance(parsed_txs, list) and len(parsed_txs) > 0:
-                    with get_db() as conn:
-                        for tx in parsed_txs:
-                            if isinstance(tx, dict) and "recipient_or_sender" in tx:
-                                res = conn.execute(
-                                    """
-                                    INSERT OR IGNORE INTO transactions (
-                                        user_id, date, recipient_or_sender, particulars_note,
-                                        debit_amount, credit_amount, type, category, file_path
-                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                    """,
-                                    (
-                                        user_id,
-                                        str(tx.get("date", "")),
-                                        str(tx.get("recipient_or_sender", "")),
-                                        str(tx.get("particulars_note", "")),
-                                        float(tx.get("debit_amount", 0.0)),
-                                        float(tx.get("credit_amount", 0.0)),
-                                        str(tx.get("type", "DEBIT")),
-                                        str(tx.get("category", "Others")),
-                                        files[0].filename if files and files[0].filename else existing_filename or "chat_upload",
-                                    ),
-                                )
-                                if res.rowcount > 0:
-                                    inserted_count += 1
-                        conn.commit()
-            except Exception as parse_err:
-                print(f"[CHAT JSON AUTO-PARSE WARNING] {parse_err}")
+    reply_text = response.text or "I parsed your request, but received no text output."
 
-        # Remove raw json block from conversational reply display if wanted, or leave clean formatting
-        cleaned_reply = reply_text.split("```json")[0].strip() if "```json" in reply_text else reply_text
+    # Check if response contains transaction JSON block to auto-insert into DB
+    if "```json" in reply_text or "```" in reply_text:
+        try:
+            json_str = reply_text.split("```json")[-1].split("```")[0].strip() if "```json" in reply_text else reply_text.split("```")[-2].strip()
+            parsed_txs = json.loads(json_str)
+            if isinstance(parsed_txs, list) and len(parsed_txs) > 0:
+                with get_db() as conn:
+                    for tx in parsed_txs:
+                        if isinstance(tx, dict) and "recipient_or_sender" in tx:
+                            res = conn.execute(
+                                """
+                                INSERT OR IGNORE INTO transactions (
+                                    user_id, date, recipient_or_sender, particulars_note,
+                                    debit_amount, credit_amount, type, category, file_path
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                """,
+                                (
+                                    user_id,
+                                    str(tx.get("date", "")),
+                                    str(tx.get("recipient_or_sender", "")),
+                                    str(tx.get("particulars_note", "")),
+                                    float(tx.get("debit_amount", 0.0)),
+                                    float(tx.get("credit_amount", 0.0)),
+                                    str(tx.get("type", "DEBIT")),
+                                    str(tx.get("category", "Others")),
+                                    files[0].filename if files and files[0].filename else existing_filename or "chat_upload",
+                                ),
+                            )
+                            if res.rowcount > 0:
+                                inserted_count += 1
+                    conn.commit()
+        except Exception as parse_err:
+            print(f"[CHAT JSON AUTO-PARSE WARNING] {parse_err}")
 
-        return {
-            "reply": cleaned_reply,
-            "inserted_count": inserted_count,
-            "used_model": model_to_use
-        }
-    except Exception as e:
-        print(f"[CHAT ERROR] {e}")
-        raise HTTPException(status_code=500, detail=f"Gemini AI Chat Error: {str(e)}")
+    # Remove raw json block from conversational reply display if wanted, or leave clean formatting
+    cleaned_reply = reply_text.split("```json")[0].strip() if "```json" in reply_text else reply_text
+
+    return {
+        "reply": cleaned_reply,
+        "inserted_count": inserted_count,
+        "used_model": model_to_use
+    }
 
 
 @app.post("/api/transactions/clear-all")
@@ -1117,8 +1119,22 @@ def get_transactions(
         params.append(account_filter)
 
     if search_query:
-        query += " AND (recipient_or_sender LIKE ? OR particulars_note LIKE ?)"
-        params.extend([f"%{search_query}%", f"%{search_query}%"])
+        search_term = search_query.strip()
+        month_map = {
+            "january": "01", "jan": "01", "february": "02", "feb": "02",
+            "march": "03", "mar": "03", "april": "04", "apr": "04",
+            "may": "05", "june": "06", "jun": "06", "july": "07", "jul": "07",
+            "august": "08", "aug": "08", "september": "09", "sep": "09",
+            "october": "10", "oct": "10", "november": "11", "nov": "11",
+            "december": "12", "dec": "12",
+        }
+        m_code = month_map.get(search_term.lower())
+        if m_code:
+            query += " AND (recipient_or_sender LIKE ? OR particulars_note LIKE ? OR date LIKE ? OR category LIKE ? OR account_name LIKE ? OR date LIKE ?)"
+            params.extend([f"%{search_query}%", f"%{search_query}%", f"%{search_query}%", f"%{search_query}%", f"%{search_query}%", f"%-{m_code}-%"])
+        else:
+            query += " AND (recipient_or_sender LIKE ? OR particulars_note LIKE ? OR date LIKE ? OR category LIKE ? OR account_name LIKE ?)"
+            params.extend([f"%{search_query}%", f"%{search_query}%", f"%{search_query}%", f"%{search_query}%", f"%{search_query}%"])
 
     if start_date:
         query += " AND date >= ?"
