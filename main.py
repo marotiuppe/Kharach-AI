@@ -100,7 +100,8 @@ def get_setting_from_db(key: str, default: str = "") -> str:
         cursor = conn.cursor()
         cursor.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
         row = cursor.fetchone()
-        return row["value"] if row else os.environ.get(key, default)
+        val = row["value"].strip() if (row and row["value"]) else ""
+        return val if val else os.environ.get(key, default)
 
 
 def set_setting_in_db(key: str, value: str) -> None:
