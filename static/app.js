@@ -673,6 +673,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('admin-smtp-user').value = data.smtp_username || '';
         document.getElementById('admin-smtp-pass').value = data.smtp_password || '';
         document.getElementById('admin-smtp-from').value = data.smtp_from_email || '';
+        const resendKeyInput = document.getElementById('admin-resend-key');
+        if (resendKeyInput) resendKeyInput.value = data.resend_api_key || '';
+        const brevoKeyInput = document.getElementById('admin-brevo-key');
+        if (brevoKeyInput) brevoKeyInput.value = data.brevo_api_key || '';
         const reqMobileInput = document.getElementById('admin-req-mobile-otp');
         if (reqMobileInput) reqMobileInput.value = data.require_mobile_otp || 'false';
         const saveFilesInput = document.getElementById('admin-save-files');
@@ -699,6 +703,10 @@ document.addEventListener('DOMContentLoaded', () => {
     formData.append('smtp_username', document.getElementById('admin-smtp-user').value);
     formData.append('smtp_password', document.getElementById('admin-smtp-pass').value);
     formData.append('smtp_from_email', document.getElementById('admin-smtp-from').value);
+    const resendKeyInput = document.getElementById('admin-resend-key');
+    if (resendKeyInput) formData.append('resend_api_key', resendKeyInput.value);
+    const brevoKeyInput = document.getElementById('admin-brevo-key');
+    if (brevoKeyInput) formData.append('brevo_api_key', brevoKeyInput.value);
     const reqMobileInput = document.getElementById('admin-req-mobile-otp');
     if (reqMobileInput) formData.append('require_mobile_otp', reqMobileInput.value);
     const saveFilesInput = document.getElementById('admin-save-files');

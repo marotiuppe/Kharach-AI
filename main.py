@@ -7,8 +7,9 @@ import random
 import secrets
 import smtplib
 import socket
-import sqlite3
 import ssl
+import urllib.error
+import urllib.request
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -369,6 +370,70 @@ def create_ipv4_socket(host: str, port: int, timeout: float = 10.0) -> socket.so
     raise socket.error(f"Could not connect to {host}:{port} via IPv4")
 
 
+def send_email_via_http_api(to_email: str, otp_code: str, html_body: str) -> bool:
+    """Send Email OTP via HTTPS REST API (Port 443 — NEVER blocked on Render Free Tier)."""
+    resend_key = get_setting_from_db("RESEND_API_KEY", "").strip() or os.environ.get("RESEND_API_KEY", "").strip()
+    brevo_key = get_setting_from_db("BREVO_API_KEY", "").strip() or os.environ.get("BREVO_API_KEY", "").strip()
+
+    subject = f"Kharach AI — Your Verification Code: {otp_code}"
+    from_email = get_setting_from_db("SMTP_FROM_EMAIL", "").strip()
+
+    # 1. Try Resend HTTP API (Port 443)
+    if resend_key:
+        try:
+            print(f"[HTTP EMAIL ATTEMPT] Sending via Resend API to {to_email}...")
+            payload = json.dumps({
+                "from": from_email or "onboarding@resend.dev",
+                "to": [to_email],
+                "subject": subject,
+                "html": html_body
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {resend_key}",
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status in (200, 201):
+                    print(f"[HTTP EMAIL SUCCESS] Email OTP sent to {to_email} via Resend API")
+                    return True
+        except Exception as e:
+            print(f"[HTTP EMAIL ERROR] Resend API failed: {e}")
+
+    # 2. Try Brevo HTTP API (Port 443)
+    if brevo_key:
+        try:
+            print(f"[HTTP EMAIL ATTEMPT] Sending via Brevo API to {to_email}...")
+            sender = from_email or get_setting_from_db("SMTP_USERNAME", "").strip() or "noreply@kharach.ai"
+            payload = json.dumps({
+                "sender": {"email": sender, "name": "Kharach AI"},
+                "to": [{"email": to_email}],
+                "subject": subject,
+                "htmlContent": html_body
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.brevo.com/v3/smtp/email",
+                data=payload,
+                headers={
+                    "api-key": brevo_key,
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status in (200, 201):
+                    print(f"[HTTP EMAIL SUCCESS] Email OTP sent to {to_email} via Brevo API")
+                    return True
+        except Exception as e:
+            print(f"[HTTP EMAIL ERROR] Brevo API failed: {e}")
+
+    return False
+
+
 def send_email_otp(to_email: str, otp_code: str) -> bool:
     smtp_server = get_setting_from_db("SMTP_SERVER", "smtp.gmail.com")
     smtp_port_raw = get_setting_from_db("SMTP_PORT", "587")
@@ -380,15 +445,6 @@ def send_email_otp(to_email: str, otp_code: str) -> bool:
     smtp_user = get_setting_from_db("SMTP_USERNAME", "")
     smtp_pass = get_setting_from_db("SMTP_PASSWORD", "")
     from_email = get_setting_from_db("SMTP_FROM_EMAIL", smtp_user or "noreply@kharach.ai")
-
-    if not smtp_user or not smtp_pass:
-        print(f"[SMTP WARNING] Credentials missing. Logging Email OTP for {to_email}: {otp_code}")
-        return False
-
-    msg = MIMEMultipart()
-    msg["From"] = from_email
-    msg["To"] = to_email
-    msg["Subject"] = f"Kharach AI — Your Verification Code: {otp_code}"
 
     body = f"""
     <html>
@@ -403,6 +459,19 @@ def send_email_otp(to_email: str, otp_code: str) -> bool:
       </body>
     </html>
     """
+
+    # First attempt: Try HTTP API (Port 443 — 100% works on Render without firewall port blocking)
+    if send_email_via_http_api(to_email, otp_code, body):
+        return True
+
+    if not smtp_user or not smtp_pass:
+        print(f"[SMTP WARNING] Credentials missing. Logging Email OTP for {to_email}: {otp_code}")
+        return False
+
+    msg = MIMEMultipart()
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg["Subject"] = f"Kharach AI — Your Verification Code: {otp_code}"
     msg.attach(MIMEText(body, "html"))
 
     # Fallback list: try configured port first, then alternative port (587 vs 465)
@@ -414,7 +483,7 @@ def send_email_otp(to_email: str, otp_code: str) -> bool:
     for p in ports_to_try:
         try:
             print(f"[SMTP ATTEMPT] Connecting to {smtp_server}:{p} via IPv4 socket...")
-            raw_sock = create_ipv4_socket(smtp_server, p, timeout=10.0)
+            raw_sock = create_ipv4_socket(smtp_server, p, timeout=6.0)
             if p == 465:
                 context = ssl.create_default_context()
                 server = smtplib.SMTP_SSL(smtp_server, p, sock=raw_sock, context=context)
@@ -482,6 +551,8 @@ def get_admin_settings(request: Request):
         "smtp_username": get_setting_from_db("SMTP_USERNAME", ""),
         "smtp_password": get_setting_from_db("SMTP_PASSWORD", ""),
         "smtp_from_email": get_setting_from_db("SMTP_FROM_EMAIL", ""),
+        "resend_api_key": get_setting_from_db("RESEND_API_KEY", ""),
+        "brevo_api_key": get_setting_from_db("BREVO_API_KEY", ""),
         "require_mobile_otp": get_setting_from_db("REQUIRE_MOBILE_OTP", "false"),
         "save_uploaded_files": get_setting_from_db("SAVE_UPLOADED_FILES", "false"),
     }
@@ -497,6 +568,8 @@ def save_admin_settings(
     smtp_username: str = Form(...),
     smtp_password: str = Form(...),
     smtp_from_email: str = Form(...),
+    resend_api_key: str = Form(""),
+    brevo_api_key: str = Form(""),
     require_mobile_otp: str = Form("false"),
     save_uploaded_files: str = Form("false"),
 ):
@@ -511,6 +584,8 @@ def save_admin_settings(
     set_setting_in_db("SMTP_USERNAME", smtp_username)
     set_setting_in_db("SMTP_PASSWORD", smtp_password)
     set_setting_in_db("SMTP_FROM_EMAIL", smtp_from_email)
+    set_setting_in_db("RESEND_API_KEY", resend_api_key)
+    set_setting_in_db("BREVO_API_KEY", brevo_api_key)
     set_setting_in_db("REQUIRE_MOBILE_OTP", require_mobile_otp)
     set_setting_in_db("SAVE_UPLOADED_FILES", save_uploaded_files)
     return {"message": "Admin settings saved successfully"}

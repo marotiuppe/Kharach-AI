@@ -99,6 +99,21 @@
           <input type="email" id="admin-smtp-from" class="form-input" placeholder="kharachai.info@gmail.com" required />
         </div>
 
+        <div style="background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); border-radius: var(--radius-md); padding: 0.75rem; margin-bottom: 1rem;">
+          <div style="font-size: 0.8rem; font-weight: 700; color: var(--accent-primary); margin-bottom: 0.35rem;">⚡ Cloud HTTP Email API (Recommended for Render)</div>
+          <div style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.6rem;">Render blocks raw SMTP ports (587/465). Free HTTP APIs (Port 443) bypass firewalls 100%.</div>
+          
+          <div class="form-group" style="margin-bottom: 0.6rem;">
+            <label for="admin-resend-key" style="font-size: 0.75rem;">Resend API Key (re_...)</label>
+            <input type="password" id="admin-resend-key" class="form-input" placeholder="re_123456789..." style="font-size: 0.8rem;" />
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="admin-brevo-key" style="font-size: 0.75rem;">Brevo API Key (xkeysib-...)</label>
+            <input type="password" id="admin-brevo-key" class="form-input" placeholder="xkeysib-..." style="font-size: 0.8rem;" />
+          </div>
+        </div>
+
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
           <div class="form-group" style="margin-bottom: 0;">
             <label for="admin-req-mobile-otp">Require Mobile OTP</label>
