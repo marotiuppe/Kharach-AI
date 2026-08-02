@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kharach-ai-cache-v3';
+const CACHE_NAME = 'kharach-ai-cache-v7';
 const ASSETS_TO_CACHE = [
   '/',
   '/styles.css',

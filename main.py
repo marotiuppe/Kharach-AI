@@ -1372,6 +1372,42 @@ def clear_all_transactions(request: Request):
     return {"message": "All transaction history cleared successfully", "deleted_count": deleted_count}
 
 
+@app.post("/api/admin/clear-user-transactions")
+def admin_clear_user_transactions(request: Request, target_user_id: int = Form(...)):
+    user_id = get_current_user_id(request)
+    if not is_admin_user(user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required")
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT username FROM users WHERE id = ?", (target_user_id,))
+        user_row = cursor.fetchone()
+        if not user_row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        target_username = user_row["username"]
+        cursor.execute("DELETE FROM transactions WHERE user_id = ?", (target_user_id,))
+        deleted_count = cursor.rowcount
+
+        # Clean up statement files
+        user_folder = os.path.join(UPLOADS_DIR, target_username)
+        if os.path.exists(user_folder):
+            for fname in os.listdir(user_folder):
+                fpath = os.path.join(user_folder, fname)
+                if os.path.isfile(fpath):
+                    try:
+                        os.remove(fpath)
+                    except Exception as e:
+                        print(f"Error removing target user file {fpath}: {e}")
+
+        conn.commit()
+
+    return {
+        "message": f"Successfully deleted {deleted_count} transactions and files for '{target_username}'.",
+        "deleted_count": deleted_count
+    }
+
+
 @app.get("/api/transactions")
 def get_transactions(
     request: Request,

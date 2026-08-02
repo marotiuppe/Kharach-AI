@@ -81,6 +81,80 @@ document.addEventListener('DOMContentLoaded', () => {
   // PWA Service Worker Registration & Prompt
   let deferredPrompt = null;
 
+  // ── Mobile Hamburger / Drawer ──────────────────────────────────
+  const btnHamburger = document.getElementById('btn-hamburger');
+  const mobileNavDrawer = document.getElementById('mobile-nav-drawer');
+  const mobileNavOverlay = document.getElementById('mobile-nav-overlay');
+  const mobileNavPublic = document.getElementById('mobile-nav-public');
+  const mobileNavUser = document.getElementById('mobile-nav-user');
+  const mobUserDisplayName = document.getElementById('mob-user-display-name');
+  const mobBtnAdminUsers = document.getElementById('mob-btn-admin-users');
+
+  function openMobileNav() {
+    if (!mobileNavDrawer) return;
+    mobileNavDrawer.classList.remove('hidden');
+    mobileNavOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => mobileNavDrawer.classList.add('open'));
+    btnHamburger.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeMobileNav() {
+    if (!mobileNavDrawer) return;
+    mobileNavDrawer.classList.remove('open');
+    btnHamburger.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+    setTimeout(() => {
+      mobileNavDrawer.classList.add('hidden');
+      mobileNavOverlay.classList.add('hidden');
+    }, 300);
+  }
+
+  if (btnHamburger) btnHamburger.addEventListener('click', () => {
+    const isOpen = mobileNavDrawer && mobileNavDrawer.classList.contains('open');
+    isOpen ? closeMobileNav() : openMobileNav();
+  });
+  if (mobileNavOverlay) mobileNavOverlay.addEventListener('click', closeMobileNav);
+
+  // Mobile button → existing desktop handlers (close drawer first)
+  const mobBtnLogin = document.getElementById('mob-btn-login');
+  const mobBtnSignup = document.getElementById('mob-btn-signup');
+  const mobBtnDashboard = document.getElementById('mob-btn-dashboard');
+  const mobBtnSettings = document.getElementById('mob-btn-settings');
+  const mobBtnLogout = document.getElementById('mob-btn-logout');
+  const mobLinkFeatures = document.getElementById('mob-link-features');
+  const mobLinkHow = document.getElementById('mob-link-how');
+
+  [mobLinkFeatures, mobLinkHow].forEach(el => {
+    if (el) el.addEventListener('click', closeMobileNav);
+  });
+  if (mobBtnLogin) mobBtnLogin.addEventListener('click', () => { closeMobileNav(); showAuth('login'); });
+  if (mobBtnSignup) mobBtnSignup.addEventListener('click', () => { closeMobileNav(); showAuth('signup'); });
+  if (mobBtnDashboard) mobBtnDashboard.addEventListener('click', async () => {
+    closeMobileNav();
+    const res = await fetch('/api/me');
+    const data = await res.json();
+    if (data.authenticated) showDashboard(data.full_name || data.username, data.is_admin);
+  });
+  if (mobBtnSettings) mobBtnSettings.addEventListener('click', () => { closeMobileNav(); showAdminSettingsScreen(); });
+  if (mobBtnAdminUsers) mobBtnAdminUsers.addEventListener('click', () => { closeMobileNav(); showAdminAnalyticsScreen(); });
+  if (mobBtnLogout) mobBtnLogout.addEventListener('click', () => {
+    closeMobileNav();
+    // Trigger the main logout button
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) logoutBtn.click();
+  });
+  // ─────────────────────────────────────────────────────────────────
+
+
+  // Import First Statement button (empty state CTA)
+  const btnEmptyImport = document.getElementById('btn-empty-import');
+  if (btnEmptyImport) {
+    btnEmptyImport.addEventListener('click', () => {
+      if (fileInput) fileInput.click();
+    });
+  }
+
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js').catch(err => {
@@ -797,7 +871,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (filtered.length === 0) {
-      adminUsersTableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">No matching users found.</td></tr>`;
+      adminUsersTableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-secondary);">No matching users found.</td></tr>`;
       return;
     }
 
@@ -817,9 +891,47 @@ document.addEventListener('DOMContentLoaded', () => {
           <td>${formatDisplayDate(u.created_at)}</td>
           <td><strong style="color: var(--accent-primary);">${u.transaction_count || 0}</strong></td>
           <td>${roleBadge}</td>
+          <td style="text-align: center;">
+            <button class="btn btn-secondary btn-admin-clear-tx" data-userid="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size: 0.72rem; padding: 0.25rem 0.5rem; color: var(--accent-danger); border-color: rgba(239, 68, 68, 0.25); background: rgba(239, 68, 68, 0.05);">
+              🗑️ Clear Transactions
+            </button>
+          </td>
         </tr>
       `;
     }).join('');
+
+    // Attach click listeners to Clear Transaction buttons
+    adminUsersTableBody.querySelectorAll('.btn-admin-clear-tx').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const uId = btn.getAttribute('data-userid');
+        const uName = btn.getAttribute('data-username');
+        if (confirm(`Are you sure you want to permanently delete all transaction history and statement files for user '${uName}'? This action cannot be undone.`)) {
+          btn.disabled = true;
+          btn.textContent = 'Clearing...';
+          try {
+            const formData = new FormData();
+            formData.append('target_user_id', uId);
+            const res = await fetch('/api/admin/clear-user-transactions', {
+              method: 'POST',
+              body: formData
+            });
+            const data = await res.json();
+            if (res.ok) {
+              alert(data.message || 'Transaction history deleted.');
+              await loadAdminAnalytics();
+            } else {
+              alert(data.detail || 'Failed to clear transaction history.');
+            }
+          } catch (err) {
+            alert('Network error communicating with server.');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = '🗑️ Clear Transactions';
+          }
+        }
+      });
+    });
   }
 
   if (adminUsersSearch) {
@@ -906,6 +1018,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (navUserSection) navUserSection.classList.add('hidden');
     const btnFloatingAi = document.getElementById('btn-floating-ai');
     if (btnFloatingAi) btnFloatingAi.classList.add('hidden');
+    // Mobile drawer: show public group
+    if (btnHamburger) btnHamburger.classList.remove('hidden');
+    if (mobileNavPublic) { mobileNavPublic.classList.remove('hidden'); }
+    if (mobileNavUser) { mobileNavUser.classList.add('hidden'); }
   }
 
   async function fetchAppConfig() {
@@ -989,6 +1105,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadDashboardData();
     restoreChatSession();
+    // Mobile drawer: show user group
+    if (btnHamburger) btnHamburger.classList.remove('hidden');
+    if (mobileNavPublic) mobileNavPublic.classList.add('hidden');
+    if (mobileNavUser) mobileNavUser.classList.remove('hidden');
+    if (mobUserDisplayName) mobUserDisplayName.textContent = name ? `👤 ${name}` : 'User';
+    if (mobBtnAdminUsers) mobBtnAdminUsers.style.display = isAdmin ? 'block' : 'none';
   }
 
   function showAdminAnalyticsScreen() {
@@ -1201,6 +1323,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Logout
   btnLogout.addEventListener('click', async () => {
     await fetch('/api/logout', { method: 'POST' });
+    try { sessionStorage.removeItem('kharach_chat_session'); } catch(_) {}
     showAuth();
   });
 
@@ -1243,11 +1366,26 @@ document.addEventListener('DOMContentLoaded', () => {
     fileInput.click();
   });
 
-  fileInput.addEventListener('change', (e) => {
+  fileInput.addEventListener('change', async (e) => {
     const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      addFilesToStaging(files);
+    if (files.length === 0) return;
+
+    // Always open the chat drawer so the user sees feedback
+    if (dashboardChatRight && dashboardChatRight.classList.contains('chat-collapsed')) {
+      toggleChatDrawer();
     }
+
+    addFilesToStaging(files);
+
+    // Pre-fill a default analysis prompt and auto-send
+    if (chatInputPrompt.value.trim() === '') {
+      chatInputPrompt.value = 'Analyze this bank statement and extract all transactions.';
+    }
+    // Small delay to let staging render, then send
+    setTimeout(() => sendChatMessage(), 120);
+
+    // Reset file input so the same file can be re-selected if needed
+    fileInput.value = '';
   });
 
   function renderChatWelcomeMessage(txCount = 0) {
@@ -1283,6 +1421,7 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
     const count = parseInt(kpiCount.textContent, 10) || 0;
     renderChatWelcomeMessage(count);
+    try { sessionStorage.removeItem('kharach_chat_session'); } catch(_) {}
   });
 
 
@@ -1353,7 +1492,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch(_) {}
   }
 
-  function appendChatMessage(role, content, attachmentLabels = []) {
+  function appendChatMessage(role, content, attachmentLabels = [], extraHtml = '') {
     const msgDiv = document.createElement('div');
     msgDiv.className = `chat-message ${role}`;
 
@@ -1433,6 +1572,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     bubbleDiv.innerHTML = formatMarkdown(mainContent);
+
+    if (extraHtml) {
+      const extraDiv = document.createElement('div');
+      extraDiv.innerHTML = extraHtml;
+      bubbleDiv.appendChild(extraDiv);
+    }
 
     // Render extracted inline charts
     if (extractedCharts.length > 0) {
@@ -1630,11 +1775,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (res.ok) {
         let aiReply = data.reply || 'Request processed.';
+        let extraHtml = '';
         if (data.inserted_count > 0) {
-          aiReply += `<br><br><span style="color: var(--accent-success); font-weight: 600;">✅ Successfully parsed and saved ${data.inserted_count} new transaction(s) into your ledger!</span>`;
+          extraHtml = `<br><br><span style="color: var(--accent-success); font-weight: 600;">✅ Successfully parsed and saved ${data.inserted_count} new transaction(s) into your ledger!</span>`;
           await loadDashboardData();
         }
-        appendChatMessage('assistant', aiReply);
+        appendChatMessage('assistant', aiReply, [], extraHtml);
       } else {
         appendChatMessage('assistant', `⚠️ Error: ${data.detail || 'Failed to process request with Gemini.'}`);
       }
@@ -1784,6 +1930,16 @@ document.addEventListener('DOMContentLoaded', () => {
       kpiDebited.textContent = `₹${data.total_debited.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
       kpiBalance.textContent = `₹${data.net_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
       kpiCount.textContent = data.tx_count;
+
+      // Show/hide empty state based on transaction count
+      const dashboardFinancialData = document.getElementById('dashboard-financial-data');
+      const dashboardEmptyState = document.getElementById('dashboard-empty-state');
+      const hasTransactions = (data.tx_count || 0) > 0;
+      if (dashboardFinancialData) dashboardFinancialData.style.display = hasTransactions ? '' : 'none';
+      if (dashboardEmptyState) {
+        dashboardEmptyState.style.display = hasTransactions ? 'none' : 'flex';
+        dashboardEmptyState.classList.toggle('hidden', hasTransactions);
+      }
 
       const currentCat = filterCategory.value;
       filterCategory.innerHTML = '<option value="ALL">All Categories</option>';

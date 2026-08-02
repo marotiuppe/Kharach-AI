@@ -40,7 +40,36 @@
       <span id="user-display-name" class="user-badge">User</span>
       <button id="btn-logout" class="btn btn-secondary">Logout</button>
     </div>
+
+    <!-- Mobile Hamburger -->
+    <button id="btn-hamburger" class="btn-hamburger hidden" aria-label="Open menu" aria-expanded="false">
+      <span class="ham-bar"></span>
+      <span class="ham-bar"></span>
+      <span class="ham-bar"></span>
+    </button>
   </header>
+
+  <!-- Mobile Nav Drawer -->
+  <div id="mobile-nav-overlay" class="mobile-nav-overlay hidden"></div>
+  <nav id="mobile-nav-drawer" class="mobile-nav-drawer hidden" aria-label="Mobile navigation">
+    <!-- Public links (before login) -->
+    <div id="mobile-nav-public" class="mobile-nav-group hidden">
+      <a href="#features" class="mobile-nav-item" id="mob-link-features">Features</a>
+      <a href="#how-it-works" class="mobile-nav-item" id="mob-link-how">How It Works</a>
+      <button id="mob-btn-login" class="mobile-nav-item mobile-nav-btn">Sign In</button>
+      <button id="mob-btn-signup" class="mobile-nav-item mobile-nav-btn mobile-nav-btn-primary">Get Started</button>
+    </div>
+    <!-- Logged-in links -->
+    <div id="mobile-nav-user" class="mobile-nav-group hidden">
+      <div class="mobile-nav-user-info">
+        <span id="mob-user-display-name" style="font-size: 0.9rem; color: var(--text-secondary);">User</span>
+      </div>
+      <button id="mob-btn-dashboard" class="mobile-nav-item mobile-nav-btn">📊 Dashboard</button>
+      <button id="mob-btn-settings" class="mobile-nav-item mobile-nav-btn">⚙️ Settings</button>
+      <button id="mob-btn-admin-users" class="mobile-nav-item mobile-nav-btn" style="display:none;">👑 Users & Analytics</button>
+      <button id="mob-btn-logout" class="mobile-nav-item mobile-nav-btn" style="color: var(--accent-danger);">Logout</button>
+    </div>
+  </nav>
 
   <!-- Image Lightbox Modal for Full View -->
   <div id="image-lightbox-modal" class="auth-container hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 1rem;">
@@ -577,8 +606,21 @@
     <!-- Split Screen Layout: Left Dashboard | Right Gemini AI Chat -->
     <div class="dashboard-split-layout">
 
-      <!-- LEFT SIDE: Main Financial Dashboard -->
-      <div class="dashboard-main-left">
+      <!-- LEFT SIDE: Main Financial Dashboard (hidden when no transactions) -->
+      <div id="dashboard-main-left" class="dashboard-main-left">
+
+        <!-- Empty State: No Transactions (shown inside left panel) -->
+        <div id="dashboard-empty-state" class="hidden" style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:55vh; text-align:center; padding:2rem;">
+          <div style="font-size:4rem; margin-bottom:1rem; opacity:0.3;">🏦</div>
+          <h2 style="font-size:1.35rem; font-weight:700; margin-bottom:0.5rem; color:var(--text-primary);">No Transactions Yet</h2>
+          <p style="font-size:0.9rem; color:var(--text-secondary); max-width:340px; line-height:1.6; margin-bottom:1.5rem;">Drop a bank statement PDF or image anywhere on this page, or use the chat on the right to upload and analyze your first statement.</p>
+          <button id="btn-empty-import" class="btn" style="padding:0.65rem 1.5rem; font-size:0.95rem; background:var(--accent-gradient); border:none; display:flex; align-items:center; gap:0.5rem;">
+            📂 Import First Statement
+          </button>
+        </div>
+
+        <!-- Financial Data (hidden when no transactions) -->
+        <div id="dashboard-financial-data">
 
         <!-- KPI Summary Metrics -->
         <section class="kpi-grid" style="gap: 1rem; margin-bottom: 1rem;">
@@ -1038,6 +1080,8 @@
           </div>
         </div>
 
+        </div> <!-- /#dashboard-financial-data -->
+
       <!-- Drag Resizer Gutter -->
       <div class="chat-resizer hidden" id="chat-resizer" title="Drag to resize AI chat width"></div>
 
@@ -1222,11 +1266,12 @@
               <th>Joined Date</th>
               <th>Processed Transactions</th>
               <th>Role</th>
+              <th style="text-align: center;">Actions</th>
             </tr>
           </thead>
           <tbody id="admin-users-table-body">
             <tr>
-              <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 2rem 0;">Loading platform user details...</td>
+              <td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 2rem 0;">Loading platform user details...</td>
             </tr>
           </tbody>
         </table>
