@@ -130,9 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Test Models Elements
   const btnTestModels = document.getElementById('btn-test-models');
-  const modelsTestBanner = document.getElementById('models-test-banner');
   const modelsTestResults = document.getElementById('models-test-results');
-  const btnCloseModelsBanner = document.getElementById('btn-close-models-banner');
 
   // Auth Elements
   const tabLoginBtn = document.getElementById('tab-login-btn');
@@ -185,6 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabBtnLarge = document.getElementById('tab-btn-large');
   const tabBtnUdhar = document.getElementById('tab-btn-udhar');
   const tabBtnGroups = document.getElementById('tab-btn-groups');
+  const tabBtnAdminAnalytics = document.getElementById('tab-btn-admin-analytics');
+  const tabBtnAdminSettings = document.getElementById('tab-btn-admin-settings');
 
   const tabContentLedger = document.getElementById('tab-content-ledger');
   const tabContentAnalytics = document.getElementById('tab-content-analytics');
@@ -195,6 +195,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabContentLarge = document.getElementById('tab-content-large');
   const tabContentUdhar = document.getElementById('tab-content-udhar');
   const tabContentGroups = document.getElementById('tab-content-groups');
+  const tabContentAdminAnalytics = document.getElementById('tab-content-admin-analytics');
+  const tabContentAdminSettings = document.getElementById('tab-content-admin-settings');
 
   // Filter Elements
   const filterType = document.getElementById('filter-type');
@@ -659,9 +661,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Admin Settings Handlers
-  btnOpenSettings.addEventListener('click', async () => {
-    settingsModal.classList.remove('hidden');
-    settingsSaveMsg.classList.add('hidden');
+  async function loadAdminSettings() {
+    if (settingsSaveMsg) settingsSaveMsg.classList.add('hidden');
     try {
       const res = await fetch('/api/admin/settings');
       const data = await res.json();
@@ -685,11 +686,13 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       console.error('Failed to load settings', e);
     }
-  });
+  }
 
-  btnCloseSettings.addEventListener('click', () => {
-    settingsModal.classList.add('hidden');
-  });
+  if (btnOpenSettings) {
+    btnOpenSettings.addEventListener('click', () => {
+      showAdminSettingsScreen();
+    });
+  }
 
   formAdminSettings.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -732,40 +735,144 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
 
-  // Test Models Handler
+  // Admin User Analytics & Control Panel Handlers
+  const btnOpenAdminUsers = document.getElementById('btn-open-admin-users');
+  const btnCloseAdminUsersModal = document.getElementById('btn-close-admin-users-modal');
+  const adminUsersModal = document.getElementById('admin-users-modal');
+  const adminUsersTableBody = document.getElementById('admin-users-table-body');
+  const adminUsersSearch = document.getElementById('admin-users-search');
 
-  btnTestModels.addEventListener('click', async () => {
-    btnTestModels.disabled = true;
-    btnTestModels.textContent = 'Testing Models...';
-    modelsTestBanner.classList.remove('hidden');
-    modelsTestResults.innerHTML = '<span style="color: var(--text-secondary);">Sending test prompts to Gemini API models...</span>';
+  let adminUsersList = [];
 
+  if (btnOpenAdminUsers) {
+    btnOpenAdminUsers.addEventListener('click', () => {
+      showAdminAnalyticsScreen();
+    });
+  }
+
+  const btnRefreshAdminAnalytics = document.getElementById('btn-refresh-admin-analytics');
+  if (btnRefreshAdminAnalytics) {
+    btnRefreshAdminAnalytics.addEventListener('click', () => {
+      loadAdminAnalytics();
+    });
+  }
+
+  async function loadAdminAnalytics() {
     try {
-      const res = await fetch('/api/test-models');
+      const res = await fetch('/api/admin/analytics');
       const data = await res.json();
-      if (res.ok && data.models) {
-        modelsTestResults.innerHTML = data.models.map(m => {
-          const isWorking = m.status === 'WORKING';
-          const badgeColor = isWorking ? 'var(--accent-success)' : 'var(--accent-danger)';
-          const bgColor = isWorking ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
-          return `<div style="background: ${bgColor}; border: 1px solid ${badgeColor}; padding: 0.3rem 0.6rem; border-radius: 6px;">
-            <strong>${escapeHtml(m.name)}</strong>: <span style="color: ${badgeColor};">${escapeHtml(m.status)}</span>
-          </div>`;
-        }).join('');
-      } else {
-        modelsTestResults.innerHTML = `<span style="color: var(--accent-danger);">${escapeHtml(data.detail || 'Failed to test models.')}</span>`;
+      if (!res.ok) {
+        alert(data.detail || 'Failed to fetch admin user analytics.');
+        return;
       }
-    } catch (e) {
-      modelsTestResults.innerHTML = '<span style="color: var(--accent-danger);">Error connecting to backend test API.</span>';
-    } finally {
-      btnTestModels.disabled = false;
-      btnTestModels.textContent = '🔍 Check Active Models';
-    }
-  });
 
-  btnCloseModelsBanner.addEventListener('click', () => {
-    modelsTestBanner.classList.add('hidden');
-  });
+      const stats = data.stats || {};
+      adminUsersList = data.users || [];
+
+      const uEl = document.getElementById('admin-kpi-users');
+      const txEl = document.getElementById('admin-kpi-tx');
+      const udharEl = document.getElementById('admin-kpi-udhar');
+      const groupEl = document.getElementById('admin-kpi-groups');
+
+      if (uEl) uEl.textContent = stats.total_users || 0;
+      if (txEl) txEl.textContent = stats.total_transactions || 0;
+      if (udharEl) udharEl.textContent = `${stats.total_contacts || 0} (${stats.total_debts || 0} debts)`;
+      if (groupEl) groupEl.textContent = `${stats.total_groups || 0} (${stats.total_group_expenses || 0} expenses)`;
+
+      renderAdminUsersTable();
+    } catch (err) {
+      console.error('Error fetching admin analytics', err);
+    }
+  }
+
+  function renderAdminUsersTable() {
+    if (!adminUsersTableBody) return;
+    const query = (adminUsersSearch ? adminUsersSearch.value : '').toLowerCase().trim();
+
+    const filtered = adminUsersList.filter(u => {
+      return (u.full_name || '').toLowerCase().includes(query) ||
+             (u.username || '').toLowerCase().includes(query) ||
+             (u.email || '').toLowerCase().includes(query) ||
+             (u.mobile || '').toLowerCase().includes(query);
+    });
+
+    if (filtered.length === 0) {
+      adminUsersTableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">No matching users found.</td></tr>`;
+      return;
+    }
+
+    adminUsersTableBody.innerHTML = filtered.map(u => {
+      const isAdmin = u.is_admin === 1 || u.is_admin === true;
+      const roleBadge = isAdmin 
+        ? `<span class="badge-settled" style="font-size: 0.7rem; padding: 0.15rem 0.45rem;">👑 Admin</span>`
+        : `<span class="user-badge" style="font-size: 0.7rem; padding: 0.15rem 0.45rem;">👤 User</span>`;
+
+      return `
+        <tr>
+          <td>#${u.id}</td>
+          <td><strong>${escapeHtml(u.full_name || 'N/A')}</strong></td>
+          <td>${escapeHtml(u.username || 'N/A')}</td>
+          <td>${escapeHtml(u.email || 'N/A')}</td>
+          <td>${escapeHtml(u.mobile || 'N/A')}</td>
+          <td>${formatDisplayDate(u.created_at)}</td>
+          <td><strong style="color: var(--accent-primary);">${u.transaction_count || 0}</strong></td>
+          <td>${roleBadge}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  if (adminUsersSearch) {
+    adminUsersSearch.addEventListener('input', () => {
+      renderAdminUsersTable();
+    });
+  }
+
+
+  // Test Models Handler (inside Settings page)
+  if (btnTestModels) {
+    btnTestModels.addEventListener('click', async () => {
+      btnTestModels.disabled = true;
+      btnTestModels.textContent = 'Testing...';
+      if (modelsTestResults) {
+        modelsTestResults.classList.remove('hidden');
+        modelsTestResults.innerHTML = '<span style="color: var(--text-secondary);">Sending test prompts to Gemini API models...</span>';
+      }
+
+      try {
+        const res = await fetch('/api/test-models');
+        const data = await res.json();
+        if (res.ok && data.models && modelsTestResults) {
+          modelsTestResults.innerHTML = data.models.map(m => {
+            const isWorking = m.status === 'WORKING';
+            const badgeColor = isWorking ? 'var(--accent-success)' : 'var(--accent-danger)';
+            const bgColor = isWorking ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+            return `<div style="background: ${bgColor}; border: 1px solid ${badgeColor}; padding: 0.3rem 0.6rem; border-radius: 6px;">
+              <strong>${escapeHtml(m.name)}</strong>: <span style="color: ${badgeColor};">${escapeHtml(m.status)}</span>
+            </div>`;
+          }).join('');
+        } else if (modelsTestResults) {
+          modelsTestResults.innerHTML = `<span style="color: var(--accent-danger);">${escapeHtml(data.detail || 'Failed to test models.')}</span>`;
+        }
+      } catch (e) {
+        if (modelsTestResults) modelsTestResults.innerHTML = '<span style="color: var(--accent-danger);">Error connecting to backend test API.</span>';
+      } finally {
+        btnTestModels.disabled = false;
+        btnTestModels.textContent = '🔍 Run Model Tests';
+      }
+    });
+  }
+
+  if (btnNavDashboard) {
+    btnNavDashboard.addEventListener('click', async () => {
+      // Navigate back to dashboard from any admin screen — re-check auth to restore name/role
+      const res = await fetch('/api/me');
+      const data = await res.json();
+      if (data.authenticated) {
+        showDashboard(data.full_name || data.username, data.is_admin);
+      }
+    });
+  }
 
   // Auto-fill Username from Email
   signupEmailInput.addEventListener('input', (e) => {
@@ -846,13 +953,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  const adminAnalyticsScreen = document.getElementById('admin-analytics-screen');
+  const adminSettingsScreen = document.getElementById('admin-settings-screen');
+
   function showDashboard(name, isAdmin) {
     if (landingScreen) landingScreen.classList.add('hidden');
     if (authScreen) authScreen.classList.add('hidden');
+    if (adminAnalyticsScreen) adminAnalyticsScreen.classList.add('hidden');
+    if (adminSettingsScreen) adminSettingsScreen.classList.add('hidden');
     if (dashboardScreen) dashboardScreen.classList.remove('hidden');
     if (navPublicSection) navPublicSection.classList.add('hidden');
     if (navUserSection) navUserSection.classList.remove('hidden');
-    userDisplayName.textContent = `👤 ${name}${isAdmin ? ' (Admin)' : ''}`;
+    
+    if (btnNavDashboard) btnNavDashboard.className = 'btn';
+    if (btnOpenAdminUsers) btnOpenAdminUsers.className = 'btn btn-secondary';
+    if (btnOpenSettings) btnOpenSettings.className = 'btn btn-secondary';
+
+    if (name) userDisplayName.textContent = `👤 ${name}${isAdmin ? ' (Admin)' : ''}`;
 
     const btnFloatingAi = document.getElementById('btn-floating-ai');
     if (btnFloatingAi) btnFloatingAi.classList.remove('hidden');
@@ -861,15 +978,49 @@ document.addEventListener('DOMContentLoaded', () => {
     if (chatResizerGutter) chatResizerGutter.style.display = 'none';
 
     if (isAdmin) {
-      btnOpenSettings.classList.remove('hidden');
-      btnTestModels.classList.remove('hidden');
+      if (btnOpenSettings) btnOpenSettings.classList.remove('hidden');
+      if (btnOpenAdminUsers) btnOpenAdminUsers.classList.remove('hidden');
+      if (btnTestModels) btnTestModels.classList.remove('hidden');
     } else {
-      btnOpenSettings.classList.add('hidden');
-      btnTestModels.classList.add('hidden');
+      if (btnOpenSettings) btnOpenSettings.classList.add('hidden');
+      if (btnOpenAdminUsers) btnOpenAdminUsers.classList.add('hidden');
+      if (btnTestModels) btnTestModels.classList.add('hidden');
     }
 
     loadDashboardData();
     restoreChatSession();
+  }
+
+  function showAdminAnalyticsScreen() {
+    if (landingScreen) landingScreen.classList.add('hidden');
+    if (authScreen) authScreen.classList.add('hidden');
+    if (dashboardScreen) dashboardScreen.classList.add('hidden');
+    if (adminSettingsScreen) adminSettingsScreen.classList.add('hidden');
+    if (adminAnalyticsScreen) adminAnalyticsScreen.classList.remove('hidden');
+    if (navPublicSection) navPublicSection.classList.add('hidden');
+    if (navUserSection) navUserSection.classList.remove('hidden');
+
+    if (btnNavDashboard) btnNavDashboard.className = 'btn btn-secondary';
+    if (btnOpenSettings) btnOpenSettings.className = 'btn btn-secondary';
+    if (btnOpenAdminUsers) btnOpenAdminUsers.className = 'btn';
+
+    loadAdminAnalytics();
+  }
+
+  function showAdminSettingsScreen() {
+    if (landingScreen) landingScreen.classList.add('hidden');
+    if (authScreen) authScreen.classList.add('hidden');
+    if (dashboardScreen) dashboardScreen.classList.add('hidden');
+    if (adminAnalyticsScreen) adminAnalyticsScreen.classList.add('hidden');
+    if (adminSettingsScreen) adminSettingsScreen.classList.remove('hidden');
+    if (navPublicSection) navPublicSection.classList.add('hidden');
+    if (navUserSection) navUserSection.classList.remove('hidden');
+
+    if (btnNavDashboard) btnNavDashboard.className = 'btn btn-secondary';
+    if (btnOpenAdminUsers) btnOpenAdminUsers.className = 'btn btn-secondary';
+    if (btnOpenSettings) btnOpenSettings.className = 'btn';
+
+    loadAdminSettings();
   }
 
   // Floating AI FAB & Chat Drawer Toggle Handlers
@@ -1496,8 +1647,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Dashboard Tabs Switcher
-  const allTabBtns = [tabBtnLedger, tabBtnAnalytics, tabBtnMerchants, tabBtnCashflow, tabBtnRecurring, tabBtnBudget, tabBtnLarge, tabBtnUdhar, tabBtnGroups];
-  const allTabContents = [tabContentLedger, tabContentAnalytics, tabContentMerchants, tabContentCashflow, tabContentRecurring, tabContentBudget, tabContentLarge, tabContentUdhar, tabContentGroups];
+  const allTabBtns = [tabBtnLedger, tabBtnAnalytics, tabBtnMerchants, tabBtnCashflow, tabBtnRecurring, tabBtnBudget, tabBtnLarge, tabBtnUdhar, tabBtnGroups, tabBtnAdminAnalytics, tabBtnAdminSettings];
+  const allTabContents = [tabContentLedger, tabContentAnalytics, tabContentMerchants, tabContentCashflow, tabContentRecurring, tabContentBudget, tabContentLarge, tabContentUdhar, tabContentGroups, tabContentAdminAnalytics, tabContentAdminSettings];
 
   tabBtnLedger.addEventListener('click', () => switchTab(tabBtnLedger, tabContentLedger));
   tabBtnAnalytics.addEventListener('click', () => switchTab(tabBtnAnalytics, tabContentAnalytics));
@@ -1516,6 +1667,18 @@ document.addEventListener('DOMContentLoaded', () => {
     tabBtnGroups.addEventListener('click', () => {
       switchTab(tabBtnGroups, tabContentGroups, false);
       loadGroupsModule();
+    });
+  }
+  if (tabBtnAdminAnalytics) {
+    tabBtnAdminAnalytics.addEventListener('click', () => {
+      switchTab(tabBtnAdminAnalytics, tabContentAdminAnalytics, false);
+      loadAdminAnalytics();
+    });
+  }
+  if (tabBtnAdminSettings) {
+    tabBtnAdminSettings.addEventListener('click', () => {
+      switchTab(tabBtnAdminSettings, tabContentAdminSettings, false);
+      loadAdminSettings();
     });
   }
 

@@ -522,13 +522,15 @@ def get_current_user_id(request: Request) -> int:
 
 
 def is_admin_user(user_id: int) -> bool:
+    if user_id == 1:
+        return True
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,))
         row = cursor.fetchone()
         if row and row["is_admin"] is not None:
             return bool(row["is_admin"])
-        return user_id == 1
+        return False
 
 
 def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
@@ -591,6 +593,73 @@ def save_admin_settings(
     set_setting_in_db("REQUIRE_MOBILE_OTP", require_mobile_otp)
     set_setting_in_db("SAVE_UPLOADED_FILES", save_uploaded_files)
     return {"message": "Admin settings saved successfully"}
+
+
+@app.get("/api/admin/analytics")
+def get_admin_analytics(request: Request):
+    user_id = get_current_user_id(request)
+    if not is_admin_user(user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required")
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # User Stats
+        cursor.execute("SELECT COUNT(*) as cnt FROM users")
+        total_users = cursor.fetchone()["cnt"]
+
+        # Transaction Stats
+        cursor.execute(
+            """
+            SELECT COUNT(*) as cnt,
+                   COALESCE(SUM(debit_amount), 0.0) as total_debits,
+                   COALESCE(SUM(credit_amount), 0.0) as total_credits
+            FROM transactions
+            """
+        )
+        tx_row = cursor.fetchone()
+        total_tx = tx_row["cnt"]
+        total_debits = tx_row["total_debits"]
+        total_credits = tx_row["total_credits"]
+
+        # Udhar Stats
+        cursor.execute("SELECT COUNT(*) as cnt FROM contacts")
+        total_contacts = cursor.fetchone()["cnt"]
+        cursor.execute("SELECT COUNT(*) as cnt FROM debts")
+        total_debts = cursor.fetchone()["cnt"]
+
+        # Group Stats
+        cursor.execute("SELECT COUNT(*) as cnt FROM groups")
+        total_groups = cursor.fetchone()["cnt"]
+        cursor.execute("SELECT COUNT(*) as cnt FROM group_expenses")
+        total_group_expenses = cursor.fetchone()["cnt"]
+
+        # Users list with transaction counts
+        cursor.execute(
+            """
+            SELECT u.id, u.full_name, u.username, u.email, u.mobile, u.is_admin, u.created_at,
+                   COUNT(t.id) as transaction_count
+            FROM users u
+            LEFT JOIN transactions t ON u.id = t.user_id
+            GROUP BY u.id
+            ORDER BY u.id ASC
+            """
+        )
+        users = [dict(r) for r in cursor.fetchall()]
+
+        return {
+            "stats": {
+                "total_users": total_users,
+                "total_transactions": total_tx,
+                "total_debits": round(total_debits, 2),
+                "total_credits": round(total_credits, 2),
+                "total_contacts": total_contacts,
+                "total_debts": total_debts,
+                "total_groups": total_groups,
+                "total_group_expenses": total_group_expenses,
+            },
+            "users": users,
+        }
 
 
 

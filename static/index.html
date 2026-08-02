@@ -34,10 +34,9 @@
 
     <div id="nav-user-section" class="nav-user hidden">
       <button id="btn-user-theme-toggle" class="btn btn-secondary" title="Toggle Theme Preference" style="font-size: 0.8rem; padding: 0.35rem 0.6rem;">🌙</button>
-      <button id="btn-nav-landing" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">🌐 Home</button>
       <button id="btn-nav-dashboard" class="btn" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">📊 Dashboard</button>
-      <button id="btn-open-settings" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">⚙️ Admin Settings</button>
-      <button id="btn-test-models" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">🔍 Check Active Models</button>
+      <button id="btn-open-settings" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">⚙️ Settings</button>
+      <button id="btn-open-admin-users" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">👑 Users & Analytics</button>
       <span id="user-display-name" class="user-badge">User</span>
       <button id="btn-logout" class="btn btn-secondary">Logout</button>
     </div>
@@ -48,94 +47,6 @@
     <div style="position: relative; max-width: 90vw; max-height: 90vh;">
       <button id="btn-close-lightbox" style="position: absolute; top: -12px; right: -12px; background: #ef4444; color: white; border: 2px solid #0a0c10; border-radius: 50%; width: 28px; height: 28px; font-size: 0.9rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;">✕</button>
       <img id="lightbox-full-image" src="" alt="Full Statement View" style="max-width: 90vw; max-height: 88vh; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
-    </div>
-  </div>
-
-  <!-- Admin Settings Modal / Banner -->
-  <div id="settings-modal" class="auth-container hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000;">
-    <div class="auth-card" style="max-width: 550px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h2 style="font-size: 1.3rem;">⚙️ System Admin Settings</h2>
-        <button id="btn-close-settings" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">✕</button>
-      </div>
-      <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">
-        Configure server API keys and SMTP credentials safely in the SQLite database.
-      </p>
-
-      <form id="form-admin-settings">
-        <div class="form-group">
-          <label for="admin-gemini-key">Gemini API Key</label>
-          <input type="password" id="admin-gemini-key" class="form-input" placeholder="AIzaSy..." required />
-        </div>
-
-        <div class="form-group">
-          <label for="admin-gemini-model">Gemini Model</label>
-          <input type="text" id="admin-gemini-model" class="form-input" placeholder="gemini-flash-latest" required />
-        </div>
-
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem;">
-          <div class="form-group">
-            <label for="admin-smtp-server">SMTP Server</label>
-            <input type="text" id="admin-smtp-server" class="form-input" placeholder="smtp.gmail.com" required />
-          </div>
-          <div class="form-group">
-            <label for="admin-smtp-port">SMTP Port</label>
-            <input type="text" id="admin-smtp-port" class="form-input" placeholder="587" required />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="admin-smtp-user">SMTP Username / Email</label>
-          <input type="email" id="admin-smtp-user" class="form-input" placeholder="kharachai.info@gmail.com" required />
-        </div>
-
-        <div class="form-group">
-          <label for="admin-smtp-pass">SMTP App Password</label>
-          <input type="password" id="admin-smtp-pass" class="form-input" placeholder="16-character app password" required />
-        </div>
-
-        <div class="form-group">
-          <label for="admin-smtp-from">SMTP Sender Email</label>
-          <input type="email" id="admin-smtp-from" class="form-input" placeholder="kharachai.info@gmail.com" required />
-        </div>
-
-        <div style="background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); border-radius: var(--radius-md); padding: 0.75rem; margin-bottom: 1rem;">
-          <div style="font-size: 0.8rem; font-weight: 700; color: var(--accent-primary); margin-bottom: 0.35rem;">⚡ Cloud HTTP Email API (Recommended for Render)</div>
-          <div style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.6rem;">Render blocks raw SMTP ports (587/465). Free HTTP APIs (Port 443) bypass firewalls 100%.</div>
-          
-          <div class="form-group" style="margin-bottom: 0.6rem;">
-            <label for="admin-resend-key" style="font-size: 0.75rem;">Resend API Key (re_...)</label>
-            <input type="password" id="admin-resend-key" class="form-input" placeholder="re_123456789..." style="font-size: 0.8rem;" />
-          </div>
-
-          <div class="form-group" style="margin-bottom: 0;">
-            <label for="admin-brevo-key" style="font-size: 0.75rem;">Brevo API Key (xkeysib-...)</label>
-            <input type="password" id="admin-brevo-key" class="form-input" placeholder="xkeysib-..." style="font-size: 0.8rem;" />
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label for="admin-req-mobile-otp">Require Mobile OTP</label>
-            <select id="admin-req-mobile-otp" class="form-input">
-              <option value="false">Disabled (Email OTP only)</option>
-              <option value="true">Enabled</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label for="admin-save-files">Save Uploaded Files</label>
-            <select id="admin-save-files" class="form-input">
-              <option value="false">Disabled (In-memory analysis)</option>
-              <option value="true">Enabled (Save to server disk)</option>
-            </select>
-          </div>
-        </div>
-
-        <p id="settings-save-msg" style="font-size: 0.85rem; margin-bottom: 1rem;" class="hidden"></p>
-        <button type="submit" class="btn" style="width: 100%;">Save Admin Credentials</button>
-      </form>
-
-
     </div>
   </div>
 
@@ -663,15 +574,6 @@
   <!-- Dashboard Container -->
   <main id="dashboard-screen" class="dashboard-container hidden" style="padding: 0.75rem 0.5rem;">
 
-    <!-- Active Models Test Display Banner -->
-    <div id="models-test-banner" class="chart-card hidden" style="margin-bottom: 1rem; padding: 0.8rem 1rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-        <h3 style="font-size: 0.95rem;">⚡ Tested Gemini API Models</h3>
-        <button id="btn-close-models-banner" style="background: none; border: none; color: var(--text-secondary); cursor: pointer;">✕</button>
-      </div>
-      <div id="models-test-results" style="display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: 0.8rem;"></div>
-    </div>
-
     <!-- Split Screen Layout: Left Dashboard | Right Gemini AI Chat -->
     <div class="dashboard-split-layout">
 
@@ -1133,9 +1035,8 @@
             </div>
 
           </div>
+          </div>
         </div>
-
-      </div>
 
       <!-- Drag Resizer Gutter -->
       <div class="chat-resizer hidden" id="chat-resizer" title="Drag to resize AI chat width"></div>
@@ -1269,6 +1170,182 @@
       <span class="fab-label">AI Chat</span>
     </button>
 
+  </main>
+
+  <!-- Standalone Dedicated Screen: Admin User Directory & Usage Analytics -->
+  <main id="admin-analytics-screen" class="dashboard-container hidden" style="padding-top: 1.5rem;">
+    <div class="chart-card" style="padding: 1.5rem; max-width: 1200px; margin: 0 auto; width: 100%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.85rem; flex-wrap: wrap; gap: 0.75rem;">
+        <div>
+          <h2 style="font-size: 1.35rem; margin: 0; font-weight: 700; color: var(--text-primary);">👑 Admin Control Panel & User Analytics</h2>
+          <p style="font-size: 0.82rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">Real-time platform usage metrics, registered user accounts, and statement activity</p>
+        </div>
+        <button id="btn-refresh-admin-analytics" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.35rem 0.75rem;">🔄 Refresh Metrics</button>
+      </div>
+
+      <!-- Platform Stats Grid -->
+      <section class="kpi-grid" style="gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="kpi-card" style="padding: 1rem;">
+          <div class="kpi-label" style="font-size: 0.78rem;">👥 Total Users</div>
+          <div id="admin-kpi-users" class="kpi-value credit" style="font-size: 1.5rem;">0</div>
+        </div>
+        <div class="kpi-card" style="padding: 1rem;">
+          <div class="kpi-label" style="font-size: 0.78rem;">📊 Bank Transactions</div>
+          <div id="admin-kpi-tx" class="kpi-value balance" style="font-size: 1.5rem;">0</div>
+        </div>
+        <div class="kpi-card" style="padding: 1rem;">
+          <div class="kpi-label" style="font-size: 0.78rem;">📗 Udhar Ledgers</div>
+          <div id="admin-kpi-udhar" class="kpi-value debit" style="font-size: 1.5rem;">0</div>
+        </div>
+        <div class="kpi-card" style="padding: 1rem;">
+          <div class="kpi-label" style="font-size: 0.78rem;">✈️ Trip Groups & Expenses</div>
+          <div id="admin-kpi-groups" class="kpi-value" style="font-size: 1.5rem; color: var(--accent-warning);">0</div>
+        </div>
+      </section>
+
+      <!-- User Directory Header & Search Filter -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+        <h3 style="font-size: 1.05rem; margin: 0; font-weight: 600;">Registered User Accounts</h3>
+        <input type="text" id="admin-users-search" class="form-input" placeholder="Search by name, email, mobile, or username..." style="width: 320px; font-size: 0.82rem; padding: 0.35rem 0.75rem;" />
+      </div>
+
+      <!-- Full-Width User Accounts Data Table -->
+      <div class="table-container" style="max-height: 550px; overflow-y: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>User ID</th>
+              <th>Full Name</th>
+              <th>Username</th>
+              <th>Email Address</th>
+              <th>Mobile</th>
+              <th>Joined Date</th>
+              <th>Processed Transactions</th>
+              <th>Role</th>
+            </tr>
+          </thead>
+          <tbody id="admin-users-table-body">
+            <tr>
+              <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 2rem 0;">Loading platform user details...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Standalone Dedicated Screen: Server Credentials & API Settings -->
+  <main id="admin-settings-screen" class="dashboard-container hidden" style="padding-top: 1.5rem;">
+    <div class="chart-card" style="padding: 1.5rem; max-width: 900px; margin: 0 auto; width: 100%;">
+      <div style="margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.85rem;">
+        <h2 style="font-size: 1.35rem; margin: 0; font-weight: 700; color: var(--text-primary);">⚙️ Server Credentials & API Configuration</h2>
+        <p style="font-size: 0.82rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">Manage Gemini AI model rotation pools, email delivery endpoints, and system policies securely</p>
+      </div>
+
+      <form id="form-admin-settings">
+        <!-- Section 1: Gemini AI Model Settings -->
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.2rem; margin-bottom: 1.25rem;">
+          <h3 style="font-size: 1rem; margin: 0 0 0.85rem 0; color: var(--accent-primary); font-weight: 600;">🤖 Gemini AI Intelligence Engine</h3>
+          
+          <div class="form-group" style="margin-bottom: 0.85rem;">
+            <label for="admin-gemini-key">Primary Gemini API Key</label>
+            <input type="password" id="admin-gemini-key" class="form-input" placeholder="AIzaSy..." required />
+            <span style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.2rem; display: block;">Primary API key used for document extraction and financial Q&A</span>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="admin-gemini-model">Gemini Target Model Name</label>
+            <input type="text" id="admin-gemini-model" class="form-input" placeholder="gemini-flash-latest" required />
+          </div>
+        </div>
+
+        <!-- Section 2: Email Delivery & Cloud REST API -->
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.2rem; margin-bottom: 1.25rem;">
+          <h3 style="font-size: 1rem; margin: 0 0 0.4rem 0; color: var(--accent-success); font-weight: 600;">✉️ Email OTP Delivery Services</h3>
+          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">Cloud platforms (Render/AWS) block raw SMTP ports (587/465). Free REST APIs (Port 443) bypass firewalls 100%.</p>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="admin-brevo-key">Brevo API Key (xkeysib-...)</label>
+              <input type="password" id="admin-brevo-key" class="form-input" placeholder="xkeysib-..." />
+              <span style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.2rem; display: block;">Free 300 emails/day over HTTPS Port 443</span>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="admin-resend-key">Resend API Key (re_...)</label>
+              <input type="password" id="admin-resend-key" class="form-input" placeholder="re_123456789..." />
+              <span style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.2rem; display: block;">Free 3,000 emails/month over HTTPS Port 443</span>
+            </div>
+          </div>
+
+          <div style="border-top: 1px dashed var(--border-color); padding-top: 1rem; margin-top: 0.5rem;">
+            <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.75rem;">Legacy Direct SMTP Configuration (For Local Server Run)</div>
+            
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="admin-smtp-server">SMTP Server</label>
+                <input type="text" id="admin-smtp-server" class="form-input" placeholder="smtp.gmail.com" />
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="admin-smtp-port">SMTP Port</label>
+                <input type="text" id="admin-smtp-port" class="form-input" placeholder="587" />
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="admin-smtp-user">SMTP Username / Login Email</label>
+                <input type="email" id="admin-smtp-user" class="form-input" placeholder="kharachai.info@gmail.com" />
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="admin-smtp-pass">SMTP App Password</label>
+                <input type="password" id="admin-smtp-pass" class="form-input" placeholder="16-character app password" />
+              </div>
+            </div>
+            <div class="form-group" style="margin-top: 0.75rem; margin-bottom: 0;">
+              <label for="admin-smtp-from">SMTP From Email Header</label>
+              <input type="email" id="admin-smtp-from" class="form-input" placeholder="kharachai.info@gmail.com" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 3: Security & Storage Policies -->
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.2rem; margin-bottom: 1.5rem;">
+          <h3 style="font-size: 1rem; margin: 0 0 0.85rem 0; color: var(--accent-warning); font-weight: 600;">🔒 System Security & Storage Policies</h3>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="admin-req-mobile-otp">Require Dual Mobile OTP</label>
+              <select id="admin-req-mobile-otp" class="form-input" style="background: var(--bg-card); color: var(--text-primary);">
+                <option value="false">Disabled (Email OTP only)</option>
+                <option value="true">Enabled (Email + Mobile OTP)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="admin-save-files">Persist Statement Files</label>
+              <select id="admin-save-files" class="form-input" style="background: var(--bg-card); color: var(--text-primary);">
+                <option value="false">Disabled (In-memory analysis)</option>
+                <option value="true">Enabled (Save uploaded files to server disk)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <p id="settings-save-msg" style="font-size: 0.85rem; margin-bottom: 1rem;" class="hidden"></p>
+        <button type="submit" class="btn" style="width: 100%; padding: 0.65rem;">Save All Server Settings</button>
+      </form>
+
+      <!-- Section 4: Check Active Gemini Models -->
+      <div style="margin-top: 1.5rem; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h3 style="font-size: 1rem; margin: 0; color: var(--accent-primary); font-weight: 600;">🔍 Check Active Gemini Models</h3>
+            <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0.2rem 0 0 0;">Send a live test prompt to each configured API key to verify which models are reachable and responding.</p>
+          </div>
+          <button id="btn-test-models" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.4rem 0.85rem;">🔍 Run Model Tests</button>
+        </div>
+        <div id="models-test-results" class="hidden" style="display: flex; flex-wrap: wrap; gap: 0.5rem; font-size: 0.8rem; margin-top: 0.5rem;"></div>
+      </div>
+    </div>
   </main>
 
   <script src="/app.js"></script>

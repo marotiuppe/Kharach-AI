@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kharach-ai-cache-v1';
+const CACHE_NAME = 'kharach-ai-cache-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/styles.css',
@@ -36,21 +36,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Network-first strategy for static assets to ensure latest updates load immediately
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
         }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
         return networkResponse;
-      });
-    })
+      })
+      .catch(() => {
+        return caches.match(event.request);
+      })
   );
 });
